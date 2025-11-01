@@ -110,6 +110,20 @@ interface CallLog {
   ended_at: string;
 }
 
+interface BusinessAccount {
+  id: string;
+  business_name: string;
+  logo_url: string | null;
+  primary_color: string;
+  secondary_color: string;
+}
+
+interface UserRole {
+  account_type: "individual" | "business";
+  is_owner: boolean;
+  business_id: string | null;
+}
+
 const formatPhoneNumber = (number?: string) => {
   if (!number) return "Unknown";
   const cleaned = number.replace(/\D/g, "");
@@ -142,6 +156,11 @@ export default function Dashboard() {
   const [loadingTwilio, setLoadingTwilio] = useState(false);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
   const [purchasingNumber, setPurchasingNumber] = useState<string | null>(null);
+  
+  // Business account state
+  const [userRole, setUserRole] = useState<UserRole | null>(null);
+  const [businessAccount, setBusinessAccount] = useState<BusinessAccount | null>(null);
+  const [allowedWidgets, setAllowedWidgets] = useState<string[]>([]);
 
   // Search states
   const [numberSearch, setNumberSearch] = useState({
@@ -170,6 +189,86 @@ export default function Dashboard() {
         router.push("/sign-in");
       }
       setUser(user);
+      
+      // Get user role and business info
+      const { data: userData } = await supabase
+        .from("users")
+        .select("account_type")
+        .eq("id", user.id)
+        .single();
+
+      if (userData?.account_type === "business") {
+        // Check if owner
+        const { data: businessData } = await supabase
+          .from("business_accounts")
+          .select("*")
+          .eq("owner_id", user.id)
+          .single();
+
+        if (businessData) {
+          setUserRole({
+            account_type: "business",
+            is_owner: true,
+            business_id: businessData.id,
+          });
+          setBusinessAccount(businessData);
+          
+          // Owners see all widgets
+          setAllowedWidgets([
+            "overview_stats",
+            "recent_calls",
+            "call_flows",
+            "phone_numbers",
+            "quick_actions",
+          ]);
+        } else {
+          // Check if employee
+          const { data: employeeData } = await supabase
+            .from("business_employees")
+            .select("business_id")
+            .eq("user_id", user.id)
+            .eq("status", "active")
+            .single();
+
+          if (employeeData) {
+            const { data: businessData } = await supabase
+              .from("business_accounts")
+              .select("*")
+              .eq("id", employeeData.business_id)
+              .single();
+
+            setBusinessAccount(businessData);
+            setUserRole({
+              account_type: "business",
+              is_owner: false,
+              business_id: employeeData.business_id,
+            });
+
+            // Get allowed widgets for employee
+            const { data: widgetsData } = await supabase
+              .from("dashboard_widgets")
+              .select("widget_key")
+              .eq("business_id", employeeData.business_id)
+              .eq("enabled_for_employees", true);
+
+            setAllowedWidgets(widgetsData?.map((w) => w.widget_key) || []);
+          }
+        }
+      } else {
+        setUserRole({
+          account_type: "individual",
+          is_owner: false,
+          business_id: null,
+        });
+        setAllowedWidgets([
+          "overview_stats",
+          "recent_calls",
+          "call_flows",
+          "phone_numbers",
+          "quick_actions",
+        ]);
+      }
+      
       setLoading(false);
     };
 
@@ -373,237 +472,281 @@ export default function Dashboard() {
     );
   }
 
+  const isWidgetAllowed = (widgetKey: string) => {
+    return allowedWidgets.includes(widgetKey);
+  };
+
   const renderContent = () => {
     switch (currentView) {
       case "overview":
         return (
           <div className="space-y-6 animate-in fade-in duration-700">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              <div
-                className="animate-in fade-in slide-in-from-left-4 duration-500"
-                style={{ animationDelay: "0ms" }}
-              >
-                <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-gray-600">
-                      Total Numbers
-                    </CardTitle>
-                    <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                      <Phone className="h-4 w-4 text-white" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                      {twilioNumbers.filter((n) => n.owned).length}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Active phone numbers
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div
-                className="animate-in fade-in slide-in-from-left-4 duration-500"
-                style={{ animationDelay: "50ms" }}
-              >
-                <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-gray-600">
-                      Call Flows
-                    </CardTitle>
-                    <div className="p-2 bg-gradient-to-br from-green-600 to-green-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                      <Zap className="h-4 w-4 text-white" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold bg-gradient-to-r from-green-600 to-green-700 bg-clip-text text-transparent">
-                      {callFlows.length}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Active call flows
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div
-                className="animate-in fade-in slide-in-from-left-4 duration-500"
-                style={{ animationDelay: "100ms" }}
-              >
-                <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-gray-600">
-                      Calls Today
-                    </CardTitle>
-                    <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                      <PhoneCall className="h-4 w-4 text-white" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text text-transparent">
-                      {
-                        callLogs.filter(
-                          (log) =>
-                            new Date(log.started_at).toDateString() ===
-                            new Date().toDateString(),
-                        ).length
-                      }
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Calls processed today
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-
-              <div
-                className="animate-in fade-in slide-in-from-left-4 duration-500"
-                style={{ animationDelay: "150ms" }}
-              >
-                <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                  <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                    <CardTitle className="text-sm font-medium text-gray-600">
-                      Success Rate
-                    </CardTitle>
-                    <div className="p-2 bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                      <TrendingUp className="h-4 w-4 text-white" />
-                    </div>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-700 bg-clip-text text-transparent">
-                      98.5%
-                    </div>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Call completion rate
-                    </p>
-                  </CardContent>
-                </Card>
-              </div>
-            </div>
-
-            {/* Quick Actions */}
-            <Card
-              className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500"
-              style={{ animationDelay: "200ms" }}
-            >
-              <CardHeader>
-                <CardTitle className="text-gray-900 flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-indigo-600" />
-                  Quick Actions
-                </CardTitle>
-                <CardDescription className="text-gray-500">
-                  Get started with common tasks
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <Button
-                    className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 h-24 flex-col space-y-2 shadow-lg shadow-blue-600/30 transition-all duration-300 hover:scale-105"
-                    onClick={() => window.open("/dashboard/calling", "_blank")}
-                  >
-                    <PhoneCall className="w-6 h-6" />
-                    <span className="font-semibold">Make a Call</span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-24 flex-col space-y-2 border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 hover:scale-105 group"
-                    onClick={() => setCurrentView("purchase")}
-                  >
-                    <ShoppingCart className="w-6 h-6 text-gray-700 group-hover:text-indigo-600" />
-                    <span className="font-semibold text-gray-700 group-hover:text-indigo-600">
-                      Buy Numbers
-                    </span>
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="h-24 flex-col space-y-2 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all duration-300 hover:scale-105 group"
-                    onClick={() => setCurrentView("flows")}
-                  >
-                    <Zap className="w-6 h-6 text-gray-700 group-hover:text-purple-600" />
-                    <span className="font-semibold text-gray-700 group-hover:text-purple-600">
-                      Create Flow
-                    </span>
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Recent Activity */}
-            <Card
-              className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500"
-              style={{ animationDelay: "250ms" }}
-            >
-              <CardHeader>
-                <CardTitle className="text-gray-900 flex items-center gap-2">
-                  <Clock className="h-5 w-5 text-indigo-600" />
-                  Recent Call Logs
-                </CardTitle>
-                <CardDescription className="text-gray-500">
-                  Your latest call activity
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {callLogs.slice(0, 5).map((log, index) => (
-                    <div
-                      key={log.id}
-                      style={{ animationDelay: `${index * 50}ms` }}
-                      className="flex items-center space-x-4 p-4 rounded-xl border-2 border-gray-100 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 animate-in fade-in slide-in-from-left-4"
-                    >
-                      {/* Status indicator */}
-                      <div
-                        className={`w-3 h-3 rounded-full shadow-lg ${
-                          log.status === "completed"
-                            ? "bg-green-500 shadow-green-500/50"
-                            : log.status === "busy" ||
-                                log.status === "in-progress"
-                              ? "bg-yellow-500 shadow-yellow-500/50"
-                              : "bg-red-500 shadow-red-500/50"
-                        }`}
+            {/* Business Branding Header */}
+            {businessAccount && (
+              <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 shadow-lg">
+                <CardContent className="p-6">
+                  <div className="flex items-center gap-4">
+                    {businessAccount.logo_url ? (
+                      <img
+                        src={businessAccount.logo_url}
+                        alt="Business Logo"
+                        className="w-16 h-16 object-contain rounded-lg"
                       />
-
-                      {/* Call info */}
-                      <div className="flex-1">
-                        <p className="text-sm font-semibold text-gray-900">
-                          {log.direction === "inbound"
-                            ? "📞 Incoming"
-                            : "📱 Outgoing"}{" "}
-                          call
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          {formatPhoneNumber(log.from_number)} →{" "}
-                          {formatPhoneNumber(log.to_number)} •{" "}
-                          {formatDuration(log.duration)}
-                        </p>
+                    ) : (
+                      <div
+                        className="w-16 h-16 rounded-lg flex items-center justify-center"
+                        style={{
+                          background: `linear-gradient(135deg, ${businessAccount.primary_color}, ${businessAccount.secondary_color})`,
+                        }}
+                      >
+                        <Building className="w-8 h-8 text-white" />
                       </div>
-
-                      {/* Call time */}
-                      <div className="text-xs text-gray-500 font-medium">
-                        {log.started_at
-                          ? new Date(log.started_at).toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })
-                          : "-"}
-                      </div>
-                    </div>
-                  ))}
-                  {callLogs.length === 0 && (
-                    <div className="text-center py-12">
-                      <PhoneCall className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                      <p className="text-gray-500 font-medium">
-                        No call logs yet
-                      </p>
-                      <p className="text-sm text-gray-400 mt-1">
-                        Your call history will appear here
+                    )}
+                    <div>
+                      <h2 className="text-2xl font-bold text-gray-900">
+                        {businessAccount.business_name}
+                      </h2>
+                      <p className="text-gray-600">
+                        {userRole?.is_owner ? "Owner Dashboard" : "Employee Dashboard"}
                       </p>
                     </div>
-                  )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Stats Cards - Only show if allowed */}
+            {isWidgetAllowed("overview_stats") && (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div
+                  className="animate-in fade-in slide-in-from-left-4 duration-500"
+                  style={{ animationDelay: "0ms" }}
+                >
+                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">
+                        Total Numbers
+                      </CardTitle>
+                      <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                        <Phone className="h-4 w-4 text-white" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
+                        {twilioNumbers.filter((n) => n.owned).length}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Active phone numbers
+                      </p>
+                    </CardContent>
+                  </Card>
                 </div>
-              </CardContent>
-            </Card>
+
+                <div
+                  className="animate-in fade-in slide-in-from-left-4 duration-500"
+                  style={{ animationDelay: "50ms" }}
+                >
+                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">
+                        Call Flows
+                      </CardTitle>
+                      <div className="p-2 bg-gradient-to-br from-green-600 to-green-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                        <Zap className="h-4 w-4 text-white" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold bg-gradient-to-r from-green-600 to-green-700 bg-clip-text text-transparent">
+                        {callFlows.length}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Active call flows
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div
+                  className="animate-in fade-in slide-in-from-left-4 duration-500"
+                  style={{ animationDelay: "100ms" }}
+                >
+                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">
+                        Calls Today
+                      </CardTitle>
+                      <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                        <PhoneCall className="h-4 w-4 text-white" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text text-transparent">
+                        {
+                          callLogs.filter(
+                            (log) =>
+                              new Date(log.started_at).toDateString() ===
+                              new Date().toDateString(),
+                          ).length
+                        }
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Calls processed today
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+
+                <div
+                  className="animate-in fade-in slide-in-from-left-4 duration-500"
+                  style={{ animationDelay: "150ms" }}
+                >
+                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                      <CardTitle className="text-sm font-medium text-gray-600">
+                        Success Rate
+                      </CardTitle>
+                      <div className="p-2 bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
+                        <TrendingUp className="h-4 w-4 text-white" />
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-700 bg-clip-text text-transparent">
+                        98.5%
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Call completion rate
+                      </p>
+                    </CardContent>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {/* Quick Actions - Only show if allowed */}
+            {isWidgetAllowed("quick_actions") && (
+              <Card
+                className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500"
+                style={{ animationDelay: "200ms" }}
+              >
+                <CardHeader>
+                  <CardTitle className="text-gray-900 flex items-center gap-2">
+                    <Zap className="h-5 w-5 text-indigo-600" />
+                    Quick Actions
+                  </CardTitle>
+                  <CardDescription className="text-gray-500">
+                    Get started with common tasks
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Button
+                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 h-24 flex-col space-y-2 shadow-lg shadow-blue-600/30 transition-all duration-300 hover:scale-105"
+                      onClick={() => window.open("/dashboard/calling", "_blank")}
+                    >
+                      <PhoneCall className="w-6 h-6" />
+                      <span className="font-semibold">Make a Call</span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-24 flex-col space-y-2 border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 hover:scale-105 group"
+                      onClick={() => setCurrentView("purchase")}
+                    >
+                      <ShoppingCart className="w-6 h-6 text-gray-700 group-hover:text-indigo-600" />
+                      <span className="font-semibold text-gray-700 group-hover:text-indigo-600">
+                        Buy Numbers
+                      </span>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="h-24 flex-col space-y-2 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all duration-300 hover:scale-105 group"
+                      onClick={() => setCurrentView("flows")}
+                    >
+                      <Zap className="w-6 h-6 text-gray-700 group-hover:text-purple-600" />
+                      <span className="font-semibold text-gray-700 group-hover:text-purple-600">
+                        Create Flow
+                      </span>
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Recent Activity - Only show if allowed */}
+            {isWidgetAllowed("recent_calls") && (
+              <Card
+                className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500"
+                style={{ animationDelay: "250ms" }}
+              >
+                <CardHeader>
+                  <CardTitle className="text-gray-900 flex items-center gap-2">
+                    <Clock className="h-5 w-5 text-indigo-600" />
+                    Recent Call Logs
+                  </CardTitle>
+                  <CardDescription className="text-gray-500">
+                    Your latest call activity
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-3">
+                    {callLogs.slice(0, 5).map((log, index) => (
+                      <div
+                        key={log.id}
+                        style={{ animationDelay: `${index * 50}ms` }}
+                        className="flex items-center space-x-4 p-4 rounded-xl border-2 border-gray-100 hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 animate-in fade-in slide-in-from-left-4"
+                      >
+                        {/* Status indicator */}
+                        <div
+                          className={`w-3 h-3 rounded-full shadow-lg ${
+                            log.status === "completed"
+                              ? "bg-green-500 shadow-green-500/50"
+                              : log.status === "busy" ||
+                                  log.status === "in-progress"
+                                ? "bg-yellow-500 shadow-yellow-500/50"
+                                : "bg-red-500 shadow-red-500/50"
+                          }`}
+                        />
+
+                        {/* Call info */}
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-gray-900">
+                            {log.direction === "inbound"
+                              ? "📞 Incoming"
+                              : "📱 Outgoing"}{" "}
+                            call
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {formatPhoneNumber(log.from_number)} →{" "}
+                            {formatPhoneNumber(log.to_number)} •{" "}
+                            {formatDuration(log.duration)}
+                          </p>
+                        </div>
+
+                        {/* Call time */}
+                        <div className="text-xs text-gray-500 font-medium">
+                          {log.started_at
+                            ? new Date(log.started_at).toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })
+                            : "-"}
+                        </div>
+                      </div>
+                    ))}
+                    {callLogs.length === 0 && (
+                      <div className="text-center py-12">
+                        <PhoneCall className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                        <p className="text-gray-500 font-medium">
+                          No call logs yet
+                        </p>
+                        <p className="text-sm text-gray-400 mt-1">
+                          Your call history will appear here
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         );
 
@@ -933,21 +1076,29 @@ export default function Dashboard() {
             {/* User Profile */}
             <div className="mb-8 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border-2 border-indigo-100">
               <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
-                  {user?.user_metadata?.avatar_url ? (
-                    <img
-                      src={user.user_metadata.avatar_url}
-                      alt="Profile"
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <span className="text-white font-bold text-lg">
-                      {user?.user_metadata?.full_name?.charAt(0) ||
-                        user?.email?.charAt(0) ||
-                        "U"}
-                    </span>
-                  )}
-                </div>
+                {businessAccount?.logo_url ? (
+                  <img
+                    src={businessAccount.logo_url}
+                    alt="Business Logo"
+                    className="w-12 h-12 object-contain rounded-full"
+                  />
+                ) : (
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
+                    {user?.user_metadata?.avatar_url ? (
+                      <img
+                        src={user.user_metadata.avatar_url}
+                        alt="Profile"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-white font-bold text-lg">
+                        {user?.user_metadata?.full_name?.charAt(0) ||
+                          user?.email?.charAt(0) ||
+                          "U"}
+                      </span>
+                    )}
+                  </div>
+                )}
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-bold text-gray-900 truncate">
                     {user?.user_metadata?.full_name ||
@@ -955,7 +1106,7 @@ export default function Dashboard() {
                       "User"}
                   </p>
                   <p className="text-xs text-gray-600 truncate">
-                    {user?.email}
+                    {userRole?.is_owner ? "Owner" : userRole?.account_type === "business" ? "Employee" : "Individual"}
                   </p>
                 </div>
               </div>
@@ -1019,6 +1170,18 @@ export default function Dashboard() {
                 <PhoneCall className="w-5 h-5" />
                 <span>Call Logs</span>
               </a>
+
+              {/* Business Settings - Only for owners */}
+              {userRole?.is_owner && (
+                <a
+                  href="/dashboard/business-settings"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 border-t-2 border-gray-100 mt-2 pt-4"
+                >
+                  <Building className="w-5 h-5" />
+                  <span>Business Settings</span>
+                </a>
+              )}
+
               <button
                 onClick={() => setCurrentView("settings")}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
@@ -1038,13 +1201,23 @@ export default function Dashboard() {
         <div className="flex-1 p-8">
           <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
             <div className="flex items-center gap-3 mb-2">
-              <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl shadow-lg">
-                <BarChart3 className="h-6 w-6 text-white" />
-              </div>
+              {businessAccount?.logo_url ? (
+                <img
+                  src={businessAccount.logo_url}
+                  alt="Logo"
+                  className="w-12 h-12 object-contain"
+                />
+              ) : (
+                <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl shadow-lg">
+                  <BarChart3 className="h-6 w-6 text-white" />
+                </div>
+              )}
               <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
             </div>
             <p className="text-gray-600 text-lg">
-              Manage your VoIP communications and phone numbers.
+              {businessAccount
+                ? `${businessAccount.business_name} - ${userRole?.is_owner ? "Owner" : "Employee"} Portal`
+                : "Manage your VoIP communications and phone numbers."}
             </p>
           </div>
 

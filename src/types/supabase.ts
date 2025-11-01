@@ -56,29 +56,41 @@ export type Database = {
       business_accounts: {
         Row: {
           business_name: string
+          company_size: string | null
           created_at: string | null
-          employee_range: string | null
+          custom_domain: string | null
           id: string
+          industry: string | null
           logo_url: string | null
           owner_id: string | null
+          primary_color: string | null
+          secondary_color: string | null
           subdomain: string
         }
         Insert: {
           business_name: string
+          company_size?: string | null
           created_at?: string | null
-          employee_range?: string | null
+          custom_domain?: string | null
           id?: string
+          industry?: string | null
           logo_url?: string | null
           owner_id?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
           subdomain: string
         }
         Update: {
           business_name?: string
+          company_size?: string | null
           created_at?: string | null
-          employee_range?: string | null
+          custom_domain?: string | null
           id?: string
+          industry?: string | null
           logo_url?: string | null
           owner_id?: string | null
+          primary_color?: string | null
+          secondary_color?: string | null
           subdomain?: string
         }
         Relationships: [
@@ -260,6 +272,44 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
+      }
+      dashboard_widgets: {
+        Row: {
+          business_id: string
+          created_at: string
+          display_order: number | null
+          enabled_for_employees: boolean | null
+          id: string
+          widget_key: string
+          widget_name: string
+        }
+        Insert: {
+          business_id: string
+          created_at?: string
+          display_order?: number | null
+          enabled_for_employees?: boolean | null
+          id?: string
+          widget_key: string
+          widget_name: string
+        }
+        Update: {
+          business_id?: string
+          created_at?: string
+          display_order?: number | null
+          enabled_for_employees?: boolean | null
+          id?: string
+          widget_key?: string
+          widget_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "dashboard_widgets_business_id_fkey"
+            columns: ["business_id"]
+            isOneToOne: false
+            referencedRelation: "business_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       employee_invitations: {
         Row: {

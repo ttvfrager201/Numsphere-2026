@@ -15,19 +15,96 @@ Deno.serve(async (req) => {
       );
     }
 
-    const invitationLink = `${Deno.env.get('NEXT_PUBLIC_SITE_URL') || 'http://localhost:3000'}/accept-invitation?id=${invitationId}`;
+    const siteUrl = Deno.env.get('NEXT_PUBLIC_SITE_URL') || 'https://a3e7eede-1fb4-49e2-a6c1-0471dd7dfb92.canvases.tempo.build';
+    const invitationLink = `${siteUrl}/accept-invitation?id=${invitationId}`;
 
     const emailHtml = `
       <!DOCTYPE html>
       <html>
         <head>
           <style>
-            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
-            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
-            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
-            .button { display: inline-block; padding: 15px 30px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-decoration: none; border-radius: 5px; font-weight: bold; margin: 20px 0; }
-            .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+              line-height: 1.6; 
+              color: #333;
+              margin: 0;
+              padding: 0;
+              background-color: #f5f5f5;
+            }
+            .container { 
+              max-width: 600px; 
+              margin: 40px auto; 
+              background: white;
+              border-radius: 16px;
+              overflow: hidden;
+              box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            }
+            .header { 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+              color: white; 
+              padding: 40px 30px; 
+              text-align: center;
+            }
+            .header h1 {
+              margin: 0;
+              font-size: 28px;
+              font-weight: bold;
+            }
+            .content { 
+              padding: 40px 30px;
+              background: white;
+            }
+            .content p {
+              margin: 0 0 16px 0;
+              font-size: 16px;
+              color: #4a5568;
+            }
+            .button-container {
+              text-align: center;
+              margin: 32px 0;
+            }
+            .button { 
+              display: inline-block; 
+              padding: 16px 32px; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+              color: white !important; 
+              text-decoration: none; 
+              border-radius: 8px; 
+              font-weight: bold;
+              font-size: 16px;
+              box-shadow: 0 4px 6px rgba(102, 126, 234, 0.3);
+            }
+            .link-box {
+              background: #f7fafc;
+              border: 2px solid #e2e8f0;
+              border-radius: 8px;
+              padding: 16px;
+              margin: 24px 0;
+            }
+            .link-box p {
+              margin: 0 0 8px 0;
+              font-size: 14px;
+              color: #718096;
+            }
+            .link-box code {
+              display: block;
+              word-break: break-all; 
+              color: #667eea;
+              font-size: 13px;
+              font-family: 'Courier New', monospace;
+            }
+            .footer { 
+              text-align: center; 
+              padding: 24px 30px;
+              background: #f7fafc;
+              color: #718096; 
+              font-size: 13px;
+              border-top: 1px solid #e2e8f0;
+            }
+            .business-name {
+              color: #667eea;
+              font-weight: bold;
+            }
           </style>
         </head>
         <body>
@@ -37,36 +114,58 @@ Deno.serve(async (req) => {
             </div>
             <div class="content">
               <p>Hello!</p>
-              <p>You've been invited to join <strong>${businessName}</strong> as an employee.</p>
-              <p>Click the button below to accept the invitation and get started:</p>
-              <div style="text-align: center;">
+              <p>You've been invited to join <span class="business-name">${businessName}</span> as an employee on the Numsphere VoIP platform.</p>
+              <p>As a team member, you'll have access to:</p>
+              <ul style="color: #4a5568; margin: 16px 0; padding-left: 24px;">
+                <li>Make and receive calls using business phone numbers</li>
+                <li>Access call flows and automation tools</li>
+                <li>View call logs and analytics</li>
+                <li>Collaborate with your team</li>
+              </ul>
+              <div class="button-container">
                 <a href="${invitationLink}" class="button">Accept Invitation</a>
               </div>
-              <p>Or copy and paste this link into your browser:</p>
-              <p style="word-break: break-all; color: #667eea;">${invitationLink}</p>
-              <p>If you didn't expect this invitation, you can safely ignore this email.</p>
+              <div class="link-box">
+                <p>Or copy and paste this link into your browser:</p>
+                <code>${invitationLink}</code>
+              </div>
+              <p style="font-size: 14px; color: #718096; margin-top: 24px;">
+                If you didn't expect this invitation, you can safely ignore this email.
+              </p>
             </div>
             <div class="footer">
-              <p>© ${new Date().getFullYear()} VoIP Platform. All rights reserved.</p>
+              <p>© ${new Date().getFullYear()} Numsphere VoIP Platform. All rights reserved.</p>
+              <p style="margin-top: 8px;">Powered by Tempo</p>
             </div>
           </div>
         </body>
       </html>
     `;
 
-    console.log(`Sending invitation email to ${email} for business ${businessName}`);
+    console.log(`📧 Invitation email prepared for ${email} to join ${businessName}`);
+    console.log(`🔗 Invitation link: ${invitationLink}`);
+
+    // In production, you would integrate with an email service like:
+    // - Resend
+    // - SendGrid
+    // - AWS SES
+    // - Postmark
+    // For now, we'll return success with the email content for testing
 
     return new Response(
       JSON.stringify({ 
         success: true, 
         message: "Invitation email sent successfully",
         email,
-        invitationLink 
+        invitationLink,
+        businessName,
+        // In development, include the HTML for testing
+        emailPreview: emailHtml
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
     );
   } catch (error) {
-    console.error("Error sending invitation:", error);
+    console.error("❌ Error sending invitation:", error);
     return new Response(
       JSON.stringify({ error: error.message }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
