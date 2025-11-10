@@ -8,10 +8,22 @@ import { User } from '@supabase/supabase-js';
 import UserProfile from './user-profile';
 import { Phone, Zap, Bell, Search } from 'lucide-react';
 import { Input } from './ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/dropdown-menu';
+import { Building, User as UserIcon, RefreshCw } from 'lucide-react';
 
 export default function DashboardNavbar() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [hasEmployeeAccount, setHasEmployeeAccount] = useState(false);
+  const [hasPersonalAccount, setHasPersonalAccount] = useState(false);
+  const [currentDashboard, setCurrentDashboard] = useState<"employee" | "personal" | null>(null);
 
   useEffect(() => {
     const supabase = createClient();
@@ -19,6 +31,37 @@ export default function DashboardNavbar() {
     const getUser = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       setUser(user);
+      
+      if (user) {
+        // Check for employee account
+        const { data: employeeData } = await supabase
+          .from("business_employees")
+          .select("*")
+          .eq("user_id", user.id)
+          .eq("status", "active")
+          .maybeSingle();
+
+        // Check for personal/owner account
+        const { data: userData } = await supabase
+          .from("users")
+          .select("account_type")
+          .eq("id", user.id)
+          .single();
+
+        const { data: ownerData } = await supabase
+          .from("business_accounts")
+          .select("*")
+          .eq("owner_id", user.id)
+          .maybeSingle();
+
+        setHasEmployeeAccount(!!employeeData);
+        setHasPersonalAccount(userData?.account_type === "individual" || !!ownerData);
+
+        // Determine current dashboard from localStorage
+        const savedPreference = localStorage.getItem("dashboard_preference");
+        setCurrentDashboard(savedPreference as "employee" | "personal" | null);
+      }
+      
       setLoading(false);
     };
 
@@ -33,6 +76,12 @@ export default function DashboardNavbar() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const switchDashboard = (type: "employee" | "personal") => {
+    localStorage.setItem("dashboard_preference", type);
+    setCurrentDashboard(type);
+    window.location.reload();
+  };
 
   if (loading) {
     return (
@@ -80,6 +129,40 @@ export default function DashboardNavbar() {
         </div>
 
         <div className="flex gap-4 items-center">
+          {/* Dashboard Switcher - Only show if user has both accounts */}
+          {hasEmployeeAccount && hasPersonalAccount && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  {currentDashboard === "employee" ? (
+                    <>
+                      <Building className="w-4 h-4" />
+                      Employee
+                    </>
+                  ) : (
+                    <>
+                      <UserIcon className="w-4 h-4" />
+                      Personal
+                    </>
+                  )}
+                  <RefreshCw className="w-3 h-3 ml-1" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuLabel>Switch Dashboard</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => switchDashboard("employee")}>
+                  <Building className="w-4 h-4 mr-2" />
+                  Employee Dashboard
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => switchDashboard("personal")}>
+                  <UserIcon className="w-4 h-4 mr-2" />
+                  Personal Dashboard
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+
           {/* Notifications */}
           <Button variant="ghost" size="sm" className="relative">
             <Bell className="w-5 h-5 text-gray-600" />

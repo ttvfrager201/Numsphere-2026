@@ -12,14 +12,17 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { verifyOtpAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
 
 export default function VerifyOtp({
   searchParams,
 }: {
-  searchParams: Message & { email?: string; type?: string };
+  searchParams: Message & { email?: string; type?: string; token?: string };
 }) {
   const email = searchParams.email || "";
   const type = searchParams.type || "magiclink";
+  const invitationToken = searchParams.token || "";
+  const router = useRouter();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-indigo-600 flex items-center justify-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
@@ -59,9 +62,22 @@ export default function VerifyOtp({
 
         {/* OTP Form */}
         <div className="bg-white rounded-3xl shadow-2xl border-4 border-gray-900 p-8">
-          <form className="space-y-6">
+          <form className="space-y-6" action={async (formData: FormData) => {
+            const token = formData.get("token") as string;
+            const email = formData.get("email") as string;
+            const invToken = formData.get("invitationToken") as string;
+            
+            // This will be handled by the server action
+            await verifyOtpAction(formData);
+            
+            // If signup type and has invitation token, redirect to accept-invitation
+            if (type === "signup" && invToken) {
+              router.push(`/accept-invitation?token=${invToken}`);
+            }
+          }}>
             <input type="hidden" name="email" value={email} />
             <input type="hidden" name="type" value={type} />
+            <input type="hidden" name="invitationToken" value={invitationToken} />
 
             <div>
               <Label

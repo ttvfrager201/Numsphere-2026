@@ -23,49 +23,66 @@ export default function AcceptInvitationPage() {
 
   const acceptInvitation = async () => {
     try {
-      const invitationId = searchParams.get("id");
-      if (!invitationId) {
+      const token = searchParams.get("token");
+      if (!token) {
         throw new Error("Invalid invitation link");
       }
 
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
-        // Redirect to sign in with invitation ID
-        router.push(`/sign-in?invitation=${invitationId}`);
+        // Redirect to business signup with token
+        router.push(`/business-signup?token=${token}`);
         return;
       }
 
       // Get invitation details
       const { data: invitation, error: inviteError } = await supabase
-        .from("business_employees")
-        .select("*, business_accounts(business_name)")
-        .eq("id", invitationId)
+        .from("employee_invitations")
+        .select("*, business_accounts(business_name, logo_url)")
+        .eq("invitation_token", token)
+        .eq("status", "pending")
         .single();
 
-      if (inviteError) throw inviteError;
+      if (inviteError || !invitation) {
+        throw new Error("This invitation is invalid or has already been used");
+      }
 
       // Check if email matches
       if (invitation.email !== user.email) {
-        throw new Error("This invitation is for a different email address");
+        throw new Error(`This invitation is for ${invitation.email}. Please sign in with that email.`);
       }
 
-      // Update invitation status
-      await supabase
+      // Create employee record
+      const { error: employeeError } = await supabase
         .from("business_employees")
-        .update({
+        .insert({
+          business_id: invitation.business_id,
           user_id: user.id,
+          email: user.email,
+          profile_picture_url: user.user_metadata?.avatar_url || null,
           status: "active",
-        })
-        .eq("id", invitationId);
+        });
+
+      if (employeeError) throw employeeError;
+
+      // Update invitation status to accepted AND delete it
+      await supabase
+        .from("employee_invitations")
+        .delete()
+        .eq("id", invitation.id);
 
       // Update user account type
       await supabase
         .from("users")
-        .update({
+        .upsert({
+          id: user.id,
+          user_id: user.id,
+          email: user.email,
           account_type: "business",
-        })
-        .eq("id", user.id);
+          name: user.user_metadata?.full_name || "",
+          token_identifier: user.id,
+        });
 
       setStatus("success");
       setMessage(`You've successfully joined ${invitation.business_accounts?.business_name}!`);

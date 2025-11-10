@@ -34,8 +34,10 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
+  User as UserIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Card,
@@ -144,7 +146,7 @@ const formatDuration = (seconds?: number) => {
 };
 
 export default function Dashboard() {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [currentView, setCurrentView] = useState("overview");
   const [twilioNumbers, setTwilioNumbers] = useState<TwilioPhoneNumber[]>([]);
@@ -156,10 +158,20 @@ export default function Dashboard() {
   const [loadingTwilio, setLoadingTwilio] = useState(false);
   const [searchingNumbers, setSearchingNumbers] = useState(false);
   const [purchasingNumber, setPurchasingNumber] = useState<string | null>(null);
-  
+
+  // Dashboard selection dialog
+  const [showDashboardDialog, setShowDashboardDialog] = useState(false);
+  const [hasEmployeeAccount, setHasEmployeeAccount] = useState(false);
+  const [hasPersonalAccount, setHasPersonalAccount] = useState(false);
+  const [rememberPreference, setRememberPreference] = useState(false);
+  const [selectedDashboard, setSelectedDashboard] = useState<
+    "employee" | "personal" | null
+  >(null);
+
   // Business account state
   const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [businessAccount, setBusinessAccount] = useState<BusinessAccount | null>(null);
+  const [businessAccount, setBusinessAccount] =
+    useState<BusinessAccount | null>(null);
   const [allowedWidgets, setAllowedWidgets] = useState<string[]>([]);
 
   // Search states
@@ -168,6 +180,10 @@ export default function Dashboard() {
     areaCode: "",
     contains: "",
   });
+
+  // Add toll-free search state
+  const [searchType, setSearchType] = useState<"Local" | "TollFree">("Local");
+  const [tollFreePrefix, setTollFreePrefix] = useState("800");
 
   // Call flow creation
   const [newCallFlow, setNewCallFlow] = useState({
@@ -187,9 +203,13 @@ export default function Dashboard() {
       } = await supabase.auth.getUser();
       if (!user) {
         router.push("/sign-in");
+        return;
       }
       setUser(user);
-      
+
+      // Check for saved preference
+      const savedPreference = localStorage.getItem("dashboard_preference");
+
       // Get user role and business info
       const { data: userData } = await supabase
         .from("users")
@@ -197,64 +217,52 @@ export default function Dashboard() {
         .eq("id", user.id)
         .single();
 
-      if (userData?.account_type === "business") {
-        // Check if owner
-        const { data: businessData } = await supabase
-          .from("business_accounts")
-          .select("*")
-          .eq("owner_id", user.id)
-          .single();
+      // Check if employee
+      const { data: employeeData } = await supabase
+        .from("business_employees")
+        .select("business_id, business_accounts(*)")
+        .eq("user_id", user.id)
+        .eq("status", "active")
+        .maybeSingle();
 
-        if (businessData) {
-          setUserRole({
-            account_type: "business",
-            is_owner: true,
-            business_id: businessData.id,
-          });
-          setBusinessAccount(businessData);
-          
-          // Owners see all widgets
-          setAllowedWidgets([
-            "overview_stats",
-            "recent_calls",
-            "call_flows",
-            "phone_numbers",
-            "quick_actions",
-          ]);
-        } else {
-          // Check if employee
-          const { data: employeeData } = await supabase
-            .from("business_employees")
-            .select("business_id")
-            .eq("user_id", user.id)
-            .eq("status", "active")
-            .single();
+      // Check if owner
+      const { data: ownerData } = await supabase
+        .from("business_accounts")
+        .select("*")
+        .eq("owner_id", user.id)
+        .maybeSingle();
 
-          if (employeeData) {
-            const { data: businessData } = await supabase
-              .from("business_accounts")
-              .select("*")
-              .eq("id", employeeData.business_id)
-              .single();
+      const isEmployee = !!employeeData;
+      const isOwner = !!ownerData;
+      const hasPersonal = userData?.account_type === "individual" || isOwner;
 
-            setBusinessAccount(businessData);
-            setUserRole({
-              account_type: "business",
-              is_owner: false,
-              business_id: employeeData.business_id,
-            });
+      setHasEmployeeAccount(isEmployee);
+      setHasPersonalAccount(hasPersonal);
 
-            // Get allowed widgets for employee
-            const { data: widgetsData } = await supabase
-              .from("dashboard_widgets")
-              .select("widget_key")
-              .eq("business_id", employeeData.business_id)
-              .eq("enabled_for_employees", true);
-
-            setAllowedWidgets(widgetsData?.map((w) => w.widget_key) || []);
+      // If user has both employee and personal accounts
+      if (isEmployee && hasPersonal) {
+        // Check if they have a saved preference
+        if (savedPreference === "employee" || savedPreference === "personal") {
+          // Load their preferred dashboard
+          if (savedPreference === "employee") {
+            await loadEmployeeDashboard(employeeData);
+          } else {
+            await loadPersonalDashboard(ownerData);
           }
+        } else {
+          // Show dialog to choose
+          setShowDashboardDialog(true);
+          setLoading(false);
+          return;
         }
+      } else if (isEmployee) {
+        // Only employee account
+        await loadEmployeeDashboard(employeeData);
+      } else if (isOwner) {
+        // Only owner account
+        await loadPersonalDashboard(ownerData);
       } else {
+        // Individual account
         setUserRole({
           account_type: "individual",
           is_owner: false,
@@ -268,21 +276,128 @@ export default function Dashboard() {
           "quick_actions",
         ]);
       }
-      
+
       setLoading(false);
     };
 
     getUser();
   }, []);
 
-  // Add this right after your existing useEffect that gets the user
-  // Around line 160 in your dashboard component
+  const loadEmployeeDashboard = async (employeeData: any) => {
+    if (!employeeData) return;
+
+    setBusinessAccount(employeeData.business_accounts);
+    setUserRole({
+      account_type: "business",
+      is_owner: false,
+      business_id: employeeData.business_id,
+    });
+
+    // Get allowed widgets for employee
+    const { data: widgetsData } = await supabase
+      .from("dashboard_widgets")
+      .select("widget_key")
+      .eq("business_id", employeeData.business_id)
+      .eq("enabled_for_employees", true);
+
+    setAllowedWidgets(widgetsData?.map((w) => w.widget_key) || []);
+    setSelectedDashboard("employee");
+  };
+
+  const loadPersonalDashboard = async (ownerData: any) => {
+    if (ownerData) {
+      setBusinessAccount(ownerData);
+      setUserRole({
+        account_type: "business",
+        is_owner: true,
+        business_id: ownerData.id,
+      });
+    } else {
+      setUserRole({
+        account_type: "individual",
+        is_owner: false,
+        business_id: null,
+      });
+    }
+
+    setAllowedWidgets([
+      "overview_stats",
+      "recent_calls",
+      "call_flows",
+      "phone_numbers",
+      "quick_actions",
+    ]);
+    setSelectedDashboard("personal");
+  };
+
+  const handleDashboardChoice = async (choice: "employee" | "personal") => {
+    setLoading(true);
+
+    try {
+      if (rememberPreference) {
+        localStorage.setItem("dashboard_preference", choice);
+      }
+
+      if (choice === "employee") {
+        const { data: employeeData } = await supabase
+          .from("business_employees")
+          .select("business_id, business_accounts(*)")
+          .eq("user_id", user?.id)
+          .eq("status", "active")
+          .single();
+
+        await loadEmployeeDashboard(employeeData);
+      } else {
+        const { data: ownerData } = await supabase
+          .from("business_accounts")
+          .select("*")
+          .eq("owner_id", user?.id)
+          .maybeSingle();
+
+        await loadPersonalDashboard(ownerData);
+      }
+
+      setShowDashboardDialog(false);
+      toast({
+        title: "Dashboard loaded",
+        description: `Switched to ${choice} dashboard`,
+      });
+    } catch (error) {
+      console.error("Error loading dashboard:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load dashboard",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const switchDashboard = () => {
+    localStorage.removeItem("dashboard_preference");
+    setShowDashboardDialog(true);
+  };
 
   useEffect(() => {
     const checkOnboardingStatus = async () => {
       if (!user) return;
 
       try {
+        // First check if user is an employee
+        const { data: employeeData } = await supabase
+          .from("business_employees")
+          .select("id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        // If user is an employee, skip onboarding check
+        if (employeeData) {
+          console.log("User is an employee, skipping onboarding");
+          return;
+        }
+
+        // Only check onboarding for non-employees
         const { data: userData, error } = await supabase
           .from("users")
           .select("onboarding_complete")
@@ -294,7 +409,7 @@ export default function Dashboard() {
           return;
         }
 
-        // If onboarding is not complete, redirect to onboarding
+        // If onboarding is not complete and user is not an employee, redirect to onboarding
         if (!userData?.onboarding_complete) {
           router.push("/onboarding");
         }
@@ -305,7 +420,6 @@ export default function Dashboard() {
 
     checkOnboardingStatus();
   }, [user, router]);
-
   const fetchTwilioNumbers = async () => {
     setLoadingTwilio(true);
     try {
@@ -335,10 +449,26 @@ export default function Dashboard() {
   const searchAvailableNumbers = async () => {
     setSearchingNumbers(true);
     try {
+      const body: any = {
+        type: searchType,
+        country: numberSearch.country,
+        pageSize: 20,
+      };
+
+      if (searchType === "TollFree") {
+        body.tollFreePrefix = tollFreePrefix;
+      } else if (numberSearch.areaCode) {
+        body.areaCode = numberSearch.areaCode;
+      }
+
+      if (numberSearch.contains) {
+        body.contains = numberSearch.contains;
+      }
+
       const { data, error } = await supabase.functions.invoke(
         "supabase-functions-search-available-numbers",
         {
-          body: numberSearch,
+          body,
           headers: {
             Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
           },
@@ -507,7 +637,9 @@ export default function Dashboard() {
                         {businessAccount.business_name}
                       </h2>
                       <p className="text-gray-600">
-                        {userRole?.is_owner ? "Owner Dashboard" : "Employee Dashboard"}
+                        {userRole?.is_owner
+                          ? "Owner Dashboard"
+                          : "Employee Dashboard"}
                       </p>
                     </div>
                   </div>
@@ -641,7 +773,9 @@ export default function Dashboard() {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <Button
                       className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 h-24 flex-col space-y-2 shadow-lg shadow-blue-600/30 transition-all duration-300 hover:scale-105"
-                      onClick={() => window.open("/dashboard/calling", "_blank")}
+                      onClick={() =>
+                        window.open("/dashboard/calling", "_blank")
+                      }
                     >
                       <PhoneCall className="w-6 h-6" />
                       <span className="font-semibold">Make a Call</span>
@@ -864,6 +998,8 @@ export default function Dashboard() {
         );
 
       case "purchase":
+        const tollFreePrefixes = ["800", "888", "877", "866", "855", "844", "833"];
+
         return (
           <div className="space-y-6 animate-in fade-in duration-700">
             <div>
@@ -872,7 +1008,7 @@ export default function Dashboard() {
                 Buy Phone Numbers
               </h2>
               <p className="text-gray-600 mt-1">
-                Search and purchase phone numbers
+                Search and purchase local or toll-free phone numbers
               </p>
             </div>
 
@@ -883,47 +1019,85 @@ export default function Dashboard() {
                   Search Available Numbers
                 </CardTitle>
                 <CardDescription className="text-gray-500">
-                  Find the perfect phone number for your business
+                  Find local numbers or toll-free (800, 888, 877, etc.)
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <Label className="text-gray-700 font-semibold">
-                      Country
+                      Number Type
                     </Label>
-                    <Select
-                      value={numberSearch.country}
-                      onValueChange={(value) =>
-                        setNumberSearch((prev) => ({ ...prev, country: value }))
-                      }
-                    >
+                    <Select value={searchType} onValueChange={(value: "Local" | "TollFree") => setSearchType(value)}>
                       <SelectTrigger className="border-2 border-gray-200 focus:border-indigo-500 mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="US">United States</SelectItem>
-                        <SelectItem value="CA">Canada</SelectItem>
-                        <SelectItem value="GB">United Kingdom</SelectItem>
+                        <SelectItem value="Local">Local Numbers</SelectItem>
+                        <SelectItem value="TollFree">Toll-Free Numbers</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <Label className="text-gray-700 font-semibold">
-                      Area Code
-                    </Label>
-                    <Input
-                      placeholder="e.g., 313"
-                      value={numberSearch.areaCode}
-                      onChange={(e) =>
-                        setNumberSearch((prev) => ({
-                          ...prev,
-                          areaCode: e.target.value,
-                        }))
-                      }
-                      className="border-2 border-gray-200 focus:border-indigo-500 mt-1"
-                    />
-                  </div>
+
+                  {searchType === "Local" ? (
+                    <>
+                      <div>
+                        <Label className="text-gray-700 font-semibold">
+                          Country
+                        </Label>
+                        <Select
+                          value={numberSearch.country}
+                          onValueChange={(value) =>
+                            setNumberSearch((prev) => ({ ...prev, country: value }))
+                          }
+                        >
+                          <SelectTrigger className="border-2 border-gray-200 focus:border-indigo-500 mt-1">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="US">United States</SelectItem>
+                            <SelectItem value="CA">Canada</SelectItem>
+                            <SelectItem value="GB">United Kingdom</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label className="text-gray-700 font-semibold">
+                          Area Code
+                        </Label>
+                        <Input
+                          placeholder="e.g., 313"
+                          value={numberSearch.areaCode}
+                          onChange={(e) =>
+                            setNumberSearch((prev) => ({
+                              ...prev,
+                              areaCode: e.target.value,
+                            }))
+                          }
+                          className="border-2 border-gray-200 focus:border-indigo-500 mt-1"
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <div>
+                      <Label className="text-gray-700 font-semibold">
+                        Toll-Free Prefix
+                      </Label>
+                      <Select value={tollFreePrefix} onValueChange={setTollFreePrefix}>
+                        <SelectTrigger className="border-2 border-gray-200 focus:border-indigo-500 mt-1">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {tollFreePrefixes.map((prefix) => (
+                            <SelectItem key={prefix} value={prefix}>
+                              {prefix}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  )}
+
                   <div>
                     <Label className="text-gray-700 font-semibold">
                       Contains
@@ -981,9 +1155,16 @@ export default function Dashboard() {
                         className="flex items-center justify-between p-4 border-2 border-gray-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 animate-in fade-in slide-in-from-left-4 group"
                       >
                         <div>
-                          <h4 className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">
-                            {formatPhoneNumber(number.phoneNumber)}
-                          </h4>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">
+                              {formatPhoneNumber(number.phoneNumber)}
+                            </h4>
+                            {searchType === "TollFree" && (
+                              <Badge className="bg-green-100 text-green-800 border border-green-200">
+                                Toll-Free
+                              </Badge>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-600">
                             📍 {number.locality}, {number.region} •{" "}
                             {number.estimatedPrice}
@@ -1066,164 +1247,260 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-      <DashboardNavbar />
+    <>
+      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+        <DashboardNavbar />
 
-      <div className="flex">
-        {/* Sidebar */}
-        <div className="w-64 bg-white shadow-lg border-r border-gray-200 min-h-screen">
-          <div className="p-6">
-            {/* User Profile */}
-            <div className="mb-8 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border-2 border-indigo-100">
-              <div className="flex items-center space-x-3">
+        <div className="flex">
+          {/* Sidebar */}
+          <div className="w-64 bg-white shadow-lg border-r border-gray-200 min-h-screen">
+            <div className="p-6">
+              {/* User Profile */}
+              <div className="mb-8 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border-2 border-indigo-100">
+                <div className="flex items-center space-x-3">
+                  {businessAccount?.logo_url ? (
+                    <img
+                      src={businessAccount.logo_url}
+                      alt="Business Logo"
+                      className="w-12 h-12 object-contain rounded-full"
+                    />
+                  ) : (
+                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
+                      {user?.user_metadata?.avatar_url ? (
+                        <img
+                          src={user.user_metadata.avatar_url}
+                          alt="Profile"
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <span className="text-white font-bold text-lg">
+                          {user?.user_metadata?.full_name?.charAt(0) ||
+                            user?.email?.charAt(0) ||
+                            "U"}
+                        </span>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-900 truncate">
+                      {user?.user_metadata?.full_name ||
+                        user?.email?.split("@")[0] ||
+                        "User"}
+                    </p>
+                    <p className="text-xs text-gray-600 truncate">
+                      {selectedDashboard === "employee"
+                        ? "Employee"
+                        : userRole?.is_owner
+                          ? "Owner"
+                          : "Individual"}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Switch Dashboard Button */}
+                {hasEmployeeAccount && hasPersonalAccount && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={switchDashboard}
+                    className="w-full mt-3 text-xs border-2 border-indigo-200 hover:bg-indigo-50"
+                  >
+                    <RefreshCw className="w-3 h-3 mr-1" />
+                    Switch Dashboard
+                  </Button>
+                )}
+              </div>
+
+              <nav className="space-y-2">
+                <button
+                  onClick={() => setCurrentView("overview")}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                    currentView === "overview"
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
+                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  }`}
+                >
+                  <BarChart3 className="w-5 h-5" />
+                  <span>Overview</span>
+                </button>
+
+                <a
+                  href="/dashboard/calling"
+                  target="_blank"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                >
+                  <PhoneCall className="w-5 h-5" />
+                  <span>Make Calls</span>
+                </a>
+
+                <button
+                  onClick={() => setCurrentView("numbers")}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                    currentView === "numbers"
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
+                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  }`}
+                >
+                  <Phone className="w-5 h-5" />
+                  <span>Phone Numbers</span>
+                </button>
+                
+                <button
+                  onClick={() => setCurrentView("purchase")}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                    currentView === "purchase"
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
+                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  }`}
+                >
+                  <ShoppingCart className="w-5 h-5" />
+                  <span>Buy Numbers</span>
+                </button>
+                
+                <a
+                  href="/dashboard/call-flows"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                >
+                  <Zap className="w-5 h-5" />
+                  <span>Call Flows (Builder)</span>
+                </a>
+                
+                <a
+                  href="/dashboard/call-logs"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                >
+                  <PhoneCall className="w-5 h-5" />
+                  <span>Call Logs</span>
+                </a>
+
+                <a
+                  href="/dashboard/cisco-phone"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                >
+                  <Phone className="w-5 h-5" />
+                  <span>Cisco Phone</span>
+                </a>
+
+                {/* Business Settings - Only for owners */}
+                {userRole?.is_owner && (
+                  <a
+                    href="/dashboard/business-settings"
+                    className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 border-t-2 border-gray-100 mt-2 pt-4"
+                  >
+                    <Building className="w-5 h-5" />
+                    <span>Business Settings</span>
+                  </a>
+                )}
+
+                <button
+                  onClick={() => setCurrentView("settings")}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                    currentView === "settings"
+                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
+                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  }`}
+                >
+                  <Settings className="w-5 h-5" />
+                  <span>Settings</span>
+                </button>
+              </nav>
+            </div>
+          </div>
+
+          {/* Main Content */}
+          <div className="flex-1 p-8">
+            <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
+              <div className="flex items-center gap-3 mb-2">
                 {businessAccount?.logo_url ? (
                   <img
                     src={businessAccount.logo_url}
-                    alt="Business Logo"
-                    className="w-12 h-12 object-contain rounded-full"
+                    alt="Logo"
+                    className="w-12 h-12 object-contain"
                   />
                 ) : (
-                  <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
-                    {user?.user_metadata?.avatar_url ? (
-                      <img
-                        src={user.user_metadata.avatar_url}
-                        alt="Profile"
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-white font-bold text-lg">
-                        {user?.user_metadata?.full_name?.charAt(0) ||
-                          user?.email?.charAt(0) ||
-                          "U"}
-                      </span>
-                    )}
+                  <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl shadow-lg">
+                    <BarChart3 className="h-6 w-6 text-white" />
                   </div>
                 )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-gray-900 truncate">
-                    {user?.user_metadata?.full_name ||
-                      user?.email?.split("@")[0] ||
-                      "User"}
-                  </p>
-                  <p className="text-xs text-gray-600 truncate">
-                    {userRole?.is_owner ? "Owner" : userRole?.account_type === "business" ? "Employee" : "Individual"}
-                  </p>
-                </div>
+                <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
               </div>
+              <p className="text-gray-600 text-lg">
+                {businessAccount
+                  ? `${businessAccount.business_name} - ${userRole?.is_owner ? "Owner" : "Employee"} Portal`
+                  : "Manage your VoIP communications and phone numbers."}
+              </p>
             </div>
 
-            <nav className="space-y-2">
-              <button
-                onClick={() => setCurrentView("overview")}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
-                  currentView === "overview"
-                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                    : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-                }`}
-              >
-                <BarChart3 className="w-5 h-5" />
-                <span>Overview</span>
-              </button>
-
-              <a
-                href="/dashboard/calling"
-                target="_blank"
-                className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-              >
-                <PhoneCall className="w-5 h-5" />
-                <span>Make Calls</span>
-              </a>
-
-              <button
-                onClick={() => setCurrentView("numbers")}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
-                  currentView === "numbers"
-                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                    : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-                }`}
-              >
-                <Phone className="w-5 h-5" />
-                <span>Phone Numbers</span>
-              </button>
-              <button
-                onClick={() => setCurrentView("purchase")}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
-                  currentView === "purchase"
-                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                    : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-                }`}
-              >
-                <ShoppingCart className="w-5 h-5" />
-                <span>Buy Numbers</span>
-              </button>
-              <a
-                href="/dashboard/call-flows"
-                className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-              >
-                <Zap className="w-5 h-5" />
-                <span>Call Flows (Builder)</span>
-              </a>
-              <a
-                href="/dashboard/call-logs"
-                className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-              >
-                <PhoneCall className="w-5 h-5" />
-                <span>Call Logs</span>
-              </a>
-
-              {/* Business Settings - Only for owners */}
-              {userRole?.is_owner && (
-                <a
-                  href="/dashboard/business-settings"
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 border-t-2 border-gray-100 mt-2 pt-4"
-                >
-                  <Building className="w-5 h-5" />
-                  <span>Business Settings</span>
-                </a>
-              )}
-
-              <button
-                onClick={() => setCurrentView("settings")}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
-                  currentView === "settings"
-                    ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                    : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-                }`}
-              >
-                <Settings className="w-5 h-5" />
-                <span>Settings</span>
-              </button>
-            </nav>
+            {renderContent()}
           </div>
-        </div>
-
-        {/* Main Content */}
-        <div className="flex-1 p-8">
-          <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
-            <div className="flex items-center gap-3 mb-2">
-              {businessAccount?.logo_url ? (
-                <img
-                  src={businessAccount.logo_url}
-                  alt="Logo"
-                  className="w-12 h-12 object-contain"
-                />
-              ) : (
-                <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl shadow-lg">
-                  <BarChart3 className="h-6 w-6 text-white" />
-                </div>
-              )}
-              <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
-            </div>
-            <p className="text-gray-600 text-lg">
-              {businessAccount
-                ? `${businessAccount.business_name} - ${userRole?.is_owner ? "Owner" : "Employee"} Portal`
-                : "Manage your VoIP communications and phone numbers."}
-            </p>
-          </div>
-
-          {renderContent()}
         </div>
       </div>
-    </div>
+
+      {/* Dashboard Selection Dialog */}
+      <Dialog open={showDashboardDialog} onOpenChange={setShowDashboardDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-center">
+              Choose Your Dashboard
+            </DialogTitle>
+            <DialogDescription className="text-center pt-4">
+              <div className="space-y-4">
+                <p className="text-lg font-semibold text-gray-900">
+                  You have access to multiple dashboards
+                </p>
+                <p className="text-sm text-gray-600">
+                  Which dashboard would you like to use?
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid grid-cols-2 gap-3 mt-4">
+            {hasEmployeeAccount && (
+              <Button
+                onClick={() => handleDashboardChoice("employee")}
+                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-6 flex-col h-auto"
+              >
+                <Building className="w-8 h-8 mb-2" />
+                <span>Employee</span>
+                <span className="text-xs font-normal opacity-90">
+                  Business Account
+                </span>
+              </Button>
+            )}
+
+            {hasPersonalAccount && (
+              <Button
+                onClick={() => handleDashboardChoice("personal")}
+                variant="outline"
+                className="border-2 border-gray-300 font-bold py-6 flex-col h-auto hover:bg-gray-50"
+              >
+                <UserIcon className="w-8 h-8 mb-2" />
+                <span>Personal</span>
+                <span className="text-xs font-normal opacity-70">
+                  {userRole?.is_owner ? "Owner Account" : "Individual Account"}
+                </span>
+              </Button>
+            )}
+          </div>
+
+          <div className="flex items-center space-x-2 mt-4 p-3 bg-gray-50 rounded-lg">
+            <Checkbox
+              id="remember"
+              checked={rememberPreference}
+              onCheckedChange={(checked) =>
+                setRememberPreference(checked as boolean)
+              }
+            />
+            <label
+              htmlFor="remember"
+              className="text-sm font-medium text-gray-700 cursor-pointer"
+            >
+              Remember my choice and always open this dashboard
+            </label>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

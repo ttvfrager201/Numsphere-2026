@@ -106,24 +106,36 @@ export type Database = {
       business_employees: {
         Row: {
           business_id: string
+          created_at: string | null
+          email: string | null
           id: string
           joined_at: string
+          profile_picture_url: string | null
           role: string
-          user_id: string
+          status: string | null
+          user_id: string | null
         }
         Insert: {
           business_id: string
+          created_at?: string | null
+          email?: string | null
           id?: string
           joined_at?: string
+          profile_picture_url?: string | null
           role?: string
-          user_id: string
+          status?: string | null
+          user_id?: string | null
         }
         Update: {
           business_id?: string
+          created_at?: string | null
+          email?: string | null
           id?: string
           joined_at?: string
+          profile_picture_url?: string | null
           role?: string
-          user_id?: string
+          status?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -313,34 +325,31 @@ export type Database = {
       }
       employee_invitations: {
         Row: {
-          accepted_at: string | null
-          business_id: string
+          business_id: string | null
+          created_at: string | null
           email: string
           id: string
-          invited_at: string
-          invited_by: string | null
-          role: string
-          status: string
+          invitation_token: string | null
+          invited_at: string | null
+          status: string | null
         }
         Insert: {
-          accepted_at?: string | null
-          business_id: string
+          business_id?: string | null
+          created_at?: string | null
           email: string
           id?: string
-          invited_at?: string
-          invited_by?: string | null
-          role?: string
-          status?: string
+          invitation_token?: string | null
+          invited_at?: string | null
+          status?: string | null
         }
         Update: {
-          accepted_at?: string | null
-          business_id?: string
+          business_id?: string | null
+          created_at?: string | null
           email?: string
           id?: string
-          invited_at?: string
-          invited_by?: string | null
-          role?: string
-          status?: string
+          invitation_token?: string | null
+          invited_at?: string | null
+          status?: string | null
         }
         Relationships: [
           {

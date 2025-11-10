@@ -27,6 +27,8 @@ import {
   CheckCircle,
   XCircle,
   Settings,
+  Clock,
+  UserPlus,
 } from "lucide-react";
 import DashboardNavbar from "@/components/dashboard-navbar";
 
@@ -39,12 +41,22 @@ interface BusinessAccount {
   secondary_color: string;
 }
 
+interface EmployeeInvitation {
+  id: string;
+  business_id: string;
+  email: string;
+  invited_at: string;
+  status: "pending" | "accepted" | "expired";
+  invitation_token?: string;
+}
+
 interface Employee {
   id: string;
-  email: string;
-  status: "pending" | "active";
-  invited_at: string;
+  business_id: string;
   user_id: string;
+  email: string;
+  created_at: string;
+  profile_picture_url?: string;
 }
 
 interface Widget {
@@ -59,6 +71,7 @@ export default function BusinessSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [business, setBusiness] = useState<BusinessAccount | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
+  const [invitations, setInvitations] = useState<EmployeeInvitation[]>([]);
   const [widgets, setWidgets] = useState<Widget[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviting, setInviting] = useState(false);
@@ -82,7 +95,7 @@ export default function BusinessSettingsPage() {
         return;
       }
 
-      // Get business account
+      // 1️⃣ Fetch business account
       const { data: businessData, error: businessError } = await supabase
         .from("business_accounts")
         .select("*")
@@ -92,28 +105,40 @@ export default function BusinessSettingsPage() {
       if (businessError) throw businessError;
       setBusiness(businessData);
 
-      // Get employees
-      const { data: employeesData } = await supabase
+      // 2️⃣ Fetch active employees
+      const { data: employeesData, error: employeesError } = await supabase
         .from("business_employees")
         .select("*")
         .eq("business_id", businessData.id)
-        .order("invited_at", { ascending: false });
+        .eq("status", "active")
+        .order("created_at", { ascending: false });
 
+      if (employeesError) throw employeesError;
       setEmployees(employeesData || []);
 
-      // Get widgets
+      // 3️⃣ Fetch ONLY pending invitations (accepted ones are deleted)
+      const { data: invitationsData, error: invitationsError } = await supabase
+        .from("employee_invitations")
+        .select("*")
+        .eq("business_id", businessData.id)
+        .eq("status", "pending")
+        .order("invited_at", { ascending: false });
+
+      if (invitationsError) throw invitationsError;
+      setInvitations(invitationsData || []);
+
+      // 4️⃣ Fetch widgets (optional - only if you're using this feature)
       const { data: widgetsData } = await supabase
         .from("dashboard_widgets")
         .select("*")
         .eq("business_id", businessData.id)
-        .order("display_order");
+        .order("display_order", { ascending: true });
 
       setWidgets(widgetsData || []);
     } catch (error: any) {
-      console.error("Error loading business data:", error);
       toast({
         title: "Error",
-        description: "Failed to load business settings",
+        description: error.message || "Failed to load business data",
         variant: "destructive",
       });
     } finally {
@@ -127,8 +152,14 @@ export default function BusinessSettingsPage() {
 
     setUploadingLogo(true);
     try {
+      // Delete old logo if exists
+      if (business.logo_url) {
+        const oldPath = business.logo_url.split('/').slice(-2).join('/');
+        await supabase.storage.from("business-assets").remove([oldPath]);
+      }
+
       const fileExt = file.name.split(".").pop();
-      const fileName = `${business.id}-${Math.random()}.${fileExt}`;
+      const fileName = `${business.id}-${Date.now()}.${fileExt}`;
       const filePath = `logos/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -190,40 +221,54 @@ export default function BusinessSettingsPage() {
 
     setInviting(true);
     try {
-      // Create employee invitation
+      // Generate invitation token
+      const invitationToken = crypto.randomUUID();
+
+      // Create employee invitation in the new table
       const { data: invitation, error: inviteError } = await supabase
-        .from("business_employees")
+        .from("employee_invitations")
         .insert({
           business_id: business.id,
           email: inviteEmail,
           status: "pending",
+          invitation_token: invitationToken,
         })
         .select()
         .single();
 
       if (inviteError) throw inviteError;
 
-      // Send invitation email
+      // Send invitation email via Supabase function
       const { error: emailError } = await supabase.functions.invoke(
         "supabase-functions-send-employee-invitation",
         {
           body: {
             email: inviteEmail,
             businessName: business.business_name,
-            invitationId: invitation.id,
+            invitationToken: invitationToken,
+            businessId: business.id,
           },
         },
       );
 
-      if (emailError) throw emailError;
+      if (emailError) {
+        console.error("Email sending failed:", emailError);
+        // Don't throw - invitation was created successfully
+        toast({
+          title: "Invitation created",
+          description:
+            "Invitation created but email sending failed. Please check your email configuration.",
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Invitation sent!",
+          description: `Invitation email sent to ${inviteEmail}`,
+        });
+      }
 
-      setEmployees([invitation, ...employees]);
+      setInvitations([invitation, ...invitations]);
       setInviteEmail("");
-
-      toast({
-        title: "Invitation sent!",
-        description: `Invitation email sent to ${inviteEmail}`,
-      });
     } catch (error: any) {
       toast({
         title: "Error",
@@ -235,22 +280,25 @@ export default function BusinessSettingsPage() {
     }
   };
 
-  const handleToggleWidget = async (widgetId: string, enabled: boolean) => {
+  const handleRemoveInvitation = async (invitationId: string) => {
     try {
-      await supabase
-        .from("dashboard_widgets")
-        .update({ enabled_for_employees: enabled })
-        .eq("id", widgetId);
+      const { error } = await supabase
+        .from("employee_invitations")
+        .delete()
+        .eq("id", invitationId);
 
-      setWidgets(
-        widgets.map((w) =>
-          w.id === widgetId ? { ...w, enabled_for_employees: enabled } : w,
-        ),
-      );
+      if (error) throw error;
+
+      setInvitations(invitations.filter((inv) => inv.id !== invitationId));
+
+      toast({
+        title: "Invitation removed",
+        description: "The invitation has been cancelled",
+      });
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to update widget",
+        description: "Failed to remove invitation",
         variant: "destructive",
       });
     }
@@ -258,7 +306,12 @@ export default function BusinessSettingsPage() {
 
   const handleRemoveEmployee = async (employeeId: string) => {
     try {
-      await supabase.from("business_employees").delete().eq("id", employeeId);
+      const { error } = await supabase
+        .from("business_employees")
+        .delete()
+        .eq("id", employeeId);
+
+      if (error) throw error;
 
       setEmployees(employees.filter((e) => e.id !== employeeId));
 
@@ -270,6 +323,34 @@ export default function BusinessSettingsPage() {
       toast({
         title: "Error",
         description: "Failed to remove employee",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleToggleWidget = async (widgetId: string, enabled: boolean) => {
+    try {
+      const { error } = await supabase
+        .from("dashboard_widgets")
+        .update({ enabled_for_employees: enabled })
+        .eq("id", widgetId);
+
+      if (error) throw error;
+
+      setWidgets(
+        widgets.map((w) =>
+          w.id === widgetId ? { ...w, enabled_for_employees: enabled } : w,
+        ),
+      );
+
+      toast({
+        title: "Widget updated",
+        description: `Widget ${enabled ? "enabled" : "disabled"} for employees`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update widget",
         variant: "destructive",
       });
     }
@@ -448,13 +529,13 @@ export default function BusinessSettingsPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Users className="w-5 h-5 text-indigo-600" />
-                Employee Management
+                Team Management
               </CardTitle>
               <CardDescription>
                 Invite and manage your team members
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
               {/* Invite Form */}
               <div className="flex gap-2">
                 <Input
@@ -482,103 +563,163 @@ export default function BusinessSettingsPage() {
                 </Button>
               </div>
 
-              {/* Employee List */}
-              <div className="space-y-2">
-                {employees.map((employee) => (
-                  <div
-                    key={employee.id}
-                    className="flex items-center justify-between p-4 border-2 border-gray-100 rounded-lg hover:border-indigo-200 transition-colors"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-full flex items-center justify-center">
-                        <span className="text-white font-bold">
-                          {employee.email.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
-                      <div>
-                        <p className="font-semibold text-gray-900">
-                          {employee.email}
-                        </p>
-                        <p className="text-sm text-gray-500">
-                          Invited{" "}
-                          {new Date(employee.invited_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        className={
-                          employee.status === "active"
-                            ? "bg-green-100 text-green-700"
-                            : "bg-yellow-100 text-yellow-700"
-                        }
+              {/* Pending Invitations Section */}
+              {invitations.length > 0 && (
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <Clock className="w-4 h-4 text-amber-600" />
+                    <h3 className="text-sm font-semibold text-gray-700">
+                      Pending Invitations ({invitations.length})
+                    </h3>
+                  </div>
+                  <div className="space-y-2">
+                    {invitations.map((invitation) => (
+                      <div
+                        key={invitation.id}
+                        className="flex items-center justify-between p-4 border-2 border-amber-100 bg-amber-50/50 rounded-lg hover:border-amber-200 transition-colors"
                       >
-                        {employee.status === "active" ? (
-                          <CheckCircle className="w-3 h-3 mr-1" />
+                        <div className="flex items-center gap-3">
+                          <div className="w-10 h-10 bg-gradient-to-br from-amber-400 to-orange-500 rounded-full flex items-center justify-center">
+                            <Mail className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <p className="font-semibold text-gray-900">
+                              {invitation.email}
+                            </p>
+                            <p className="text-sm text-gray-500">
+                              Invited{" "}
+                              {new Date(
+                                invitation.invited_at,
+                              ).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Badge className="bg-amber-100 text-amber-700 border-amber-200">
+                            <Clock className="w-3 h-3 mr-1" />
+                            Pending
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleRemoveInvitation(invitation.id)
+                            }
+                          >
+                            <Trash2 className="w-4 h-4 text-red-600" />
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Active Employees Section */}
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <UserPlus className="w-4 h-4 text-green-600" />
+                  <h3 className="text-sm font-semibold text-gray-700">
+                    Active Employees ({employees.length})
+                  </h3>
+                </div>
+                <div className="space-y-2">
+                  {employees.map((employee) => (
+                    <div
+                      key={employee.id}
+                      className="flex items-center justify-between p-4 border-2 border-gray-100 rounded-lg hover:border-indigo-200 transition-colors"
+                    >
+                      <div className="flex items-center gap-3">
+                        {employee.profile_picture_url ? (
+                          <img
+                            src={employee.profile_picture_url}
+                            alt={employee.email}
+                            className="w-10 h-10 rounded-full object-cover border-2 border-indigo-200"
+                          />
                         ) : (
-                          <XCircle className="w-3 h-3 mr-1" />
+                          <div className="w-10 h-10 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-full flex items-center justify-center">
+                            <span className="text-white font-bold">
+                              {employee.email.charAt(0).toUpperCase()}
+                            </span>
+                          </div>
                         )}
-                        {employee.status}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleRemoveEmployee(employee.id)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </Button>
+                        <div>
+                          <p className="font-semibold text-gray-900">
+                            {employee.email}
+                          </p>
+                          <p className="text-sm text-gray-500">
+                            Joined{" "}
+                            {new Date(employee.created_at).toLocaleDateString()}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Badge className="bg-green-100 text-green-700 border-green-200">
+                          <CheckCircle className="w-3 h-3 mr-1" />
+                          Active
+                        </Badge>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveEmployee(employee.id)}
+                        >
+                          <Trash2 className="w-4 h-4 text-red-600" />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ))}
-                {employees.length === 0 && (
-                  <div className="text-center py-8 text-gray-500">
-                    <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
-                    <p>No employees yet. Invite your first team member!</p>
-                  </div>
-                )}
+                  ))}
+                  {employees.length === 0 && invitations.length === 0 && (
+                    <div className="text-center py-8 text-gray-500">
+                      <Users className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                      <p>No team members yet. Invite your first employee!</p>
+                    </div>
+                  )}
+                </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Widget Preferences */}
-          <Card className="shadow-lg">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Settings className="w-5 h-5 text-indigo-600" />
-                Employee Dashboard Widgets
-              </CardTitle>
-              <CardDescription>
-                Control which widgets employees can see on their dashboard
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                {widgets.map((widget) => (
-                  <div
-                    key={widget.id}
-                    className="flex items-center justify-between p-4 border-2 border-gray-100 rounded-lg hover:border-indigo-200 transition-colors"
-                  >
-                    <div>
-                      <p className="font-semibold text-gray-900">
-                        {widget.widget_name}
-                      </p>
-                      <p className="text-sm text-gray-500">
-                        {widget.enabled_for_employees
-                          ? "Visible to employees"
-                          : "Hidden from employees"}
-                      </p>
+          {widgets.length > 0 && (
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-indigo-600" />
+                  Employee Dashboard Widgets
+                </CardTitle>
+                <CardDescription>
+                  Control which widgets employees can see on their dashboard
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {widgets.map((widget) => (
+                    <div
+                      key={widget.id}
+                      className="flex items-center justify-between p-4 border-2 border-gray-100 rounded-lg hover:border-indigo-200 transition-colors"
+                    >
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {widget.widget_name}
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          {widget.enabled_for_employees
+                            ? "Visible to employees"
+                            : "Hidden from employees"}
+                        </p>
+                      </div>
+                      <Switch
+                        checked={widget.enabled_for_employees}
+                        onCheckedChange={(checked) =>
+                          handleToggleWidget(widget.id, checked)
+                        }
+                      />
                     </div>
-                    <Switch
-                      checked={widget.enabled_for_employees}
-                      onCheckedChange={(checked) =>
-                        handleToggleWidget(widget.id, checked)
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       </div>
     </div>

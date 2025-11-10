@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building, Loader2, Mail, KeyRound } from "lucide-react";
+import { Building, Loader2, Mail, Shield } from "lucide-react";
 
 interface BusinessBranding {
   id: string;
@@ -25,7 +25,7 @@ export default function BusinessSignupPage() {
   const [invitationToken, setInvitationToken] = useState("");
   const [signingUp, setSigningUp] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
+  const [otpCode, setOtpCode] = useState("");
   const [verifying, setVerifying] = useState(false);
 
   const searchParams = useSearchParams();
@@ -101,23 +101,24 @@ export default function BusinessSignupPage() {
         return;
       }
 
-      // Send OTP (code, not link)
+      // Send OTP code
       const { error } = await supabase.auth.signInWithOtp({
         email,
-        options: { shouldCreateUser: true },
-        emailRedirectTo: undefined,
+        options: {
+          shouldCreateUser: true,
+        },
       });
 
       if (error) throw error;
 
       setOtpSent(true);
       toast({
-        title: "OTP sent!",
-        description: "Check your email for the 6-digit verification code.",
+        title: "Code sent!",
+        description: "Check your email for the 6-digit verification code",
       });
     } catch (error: any) {
       toast({
-        title: "Failed to send OTP",
+        title: "Failed to send code",
         description: error.message,
         variant: "destructive",
       });
@@ -126,29 +127,25 @@ export default function BusinessSignupPage() {
     }
   };
 
-  const handleVerifyOtp = async (e: React.FormEvent) => {
+  const handleVerifyOtp = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setVerifying(true);
 
     try {
-      const { data, error } = await supabase.auth.verifyOtp({
+      const { error } = await supabase.auth.verifyOtp({
         email: invitationEmail,
-        token: otp,
+        token: otpCode,
         type: "email",
       });
 
       if (error) throw error;
 
-      toast({
-        title: "Verified!",
-        description: "You’ve been authenticated successfully.",
-      });
-
+      // Redirect to accept invitation
       router.push(`/accept-invitation?token=${invitationToken}`);
     } catch (error: any) {
       toast({
-        title: "Invalid code",
-        description: error.message,
+        title: "Verification failed",
+        description: error.message || "Invalid code. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -265,7 +262,7 @@ export default function BusinessSignupPage() {
               <Button
                 type="submit"
                 disabled={signingUp}
-                className="w-full flex justify-center items-center py-4 border-4 border-gray-900 rounded-2xl text-base font-black text-white focus:outline-none focus:ring-4 transition-all hover:scale-105"
+                className="w-full flex justify-center items-center py-4 px-4 border-4 border-gray-900 rounded-2xl shadow-lg text-base font-black text-white focus:outline-none focus:ring-4 transition-all hover:scale-105"
                 style={{
                   background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
                 }}
@@ -273,35 +270,46 @@ export default function BusinessSignupPage() {
                 {signingUp ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-                    Sending OTP...
+                    Sending code...
                   </>
                 ) : (
                   <>
                     <Mail className="w-5 h-5 mr-2" />
-                    Send OTP Code
+                    Send Verification Code
                   </>
                 )}
               </Button>
             </form>
           ) : (
             <form onSubmit={handleVerifyOtp} className="space-y-6">
-              <Label className="text-sm font-black text-gray-900 mb-2 block">
-                Enter the 6-digit OTP sent to your email
-              </Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                value={otp}
-                onChange={(e) => setOtp(e.target.value)}
-                placeholder="123456"
-                className="text-center text-2xl tracking-widest font-black border-4 border-gray-900 rounded-2xl"
-              />
+              <div>
+                <Label
+                  htmlFor="otp"
+                  className="text-sm font-black text-gray-900 mb-2 block"
+                >
+                  Verification Code
+                </Label>
+                <Input
+                  id="otp"
+                  name="otp"
+                  type="text"
+                  autoComplete="one-time-code"
+                  required
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value)}
+                  className="mt-1 block w-full px-4 py-3 border-4 border-gray-900 rounded-2xl shadow-sm placeholder-gray-400 focus:outline-none focus:ring-4 focus:ring-indigo-500 font-mono text-center text-lg tracking-widest"
+                  placeholder="000000"
+                />
+                <p className="mt-2 text-sm text-gray-500">
+                  Enter the 6-digit code from your email
+                </p>
+              </div>
 
               <Button
                 type="submit"
-                disabled={verifying || otp.length < 6}
-                className="w-full flex justify-center items-center py-4 border-4 border-gray-900 rounded-2xl text-base font-black text-white focus:outline-none focus:ring-4 transition-all hover:scale-105"
+                disabled={verifying || otpCode.length !== 6}
+                className="w-full flex justify-center items-center py-4 px-4 border-4 border-gray-900 rounded-2xl shadow-lg text-base font-black text-white focus:outline-none focus:ring-4 transition-all hover:scale-105"
                 style={{
                   background: `linear-gradient(135deg, ${primaryColor}, ${secondaryColor})`,
                 }}
@@ -313,13 +321,31 @@ export default function BusinessSignupPage() {
                   </>
                 ) : (
                   <>
-                    <KeyRound className="w-5 h-5 mr-2" />
-                    Verify OTP
+                    <Shield className="w-5 h-5 mr-2" />
+                    Verify Code
                   </>
                 )}
               </Button>
+
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setOtpSent(false);
+                  setOtpCode("");
+                }}
+                className="w-full text-sm"
+              >
+                ← Back to email
+              </Button>
             </form>
           )}
+        </div>
+
+        <div className="text-center">
+          <p className="text-sm text-white/90 font-medium">
+            Your data is protected with enterprise-grade encryption
+          </p>
         </div>
       </div>
     </div>

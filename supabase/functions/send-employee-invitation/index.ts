@@ -1,23 +1,34 @@
 import { corsHeaders } from "@shared/cors.ts";
-
+import { Resend } from "npm:resend";
+const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 Deno.serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders, status: 200 });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", {
+      headers: corsHeaders,
+      status: 200,
+    });
   }
-
   try {
-    const { email, businessName, invitationId } = await req.json();
-
-    if (!email || !businessName || !invitationId) {
+    const { email, businessName, invitationToken, businessId } =
+      await req.json();
+    if (!email || !businessName || !invitationToken) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 400 }
+        JSON.stringify({
+          error: "Missing required fields",
+        }),
+        {
+          headers: {
+            ...corsHeaders,
+            "Content-Type": "application/json",
+          },
+          status: 400,
+        },
       );
     }
-
-    const siteUrl = Deno.env.get('NEXT_PUBLIC_SITE_URL') || 'https://a3e7eede-1fb4-49e2-a6c1-0471dd7dfb92.canvases.tempo.build';
-    const invitationLink = `${siteUrl}/accept-invitation?id=${invitationId}`;
-
+    const siteUrl =
+      Deno.env.get("NEXT_PUBLIC_SITE_URL") ||
+      "https://a3e7eede-1fb4-49e2-a6c1-0471dd7dfb92.canvases.tempo.build";
+    const invitationLink = `${siteUrl}/business-signup?token=${invitationToken}`;
     const emailHtml = `
       <!DOCTYPE html>
       <html>
@@ -141,34 +152,45 @@ Deno.serve(async (req) => {
         </body>
       </html>
     `;
-
-    console.log(`📧 Invitation email prepared for ${email} to join ${businessName}`);
+    // Send email via Resend
+    const { data, error } = await resend.emails.send({
+      from: "Numsphere <no-reply@numsphere.online>",
+      to: email,
+      subject: `You're invited to join ${businessName} on Numsphere`,
+      html: emailHtml,
+    });
+    if (error) throw error;
+    console.log(`📧 Invitation email sent to ${email}`);
     console.log(`🔗 Invitation link: ${invitationLink}`);
-
-    // In production, you would integrate with an email service like:
-    // - Resend
-    // - SendGrid
-    // - AWS SES
-    // - Postmark
-    // For now, we'll return success with the email content for testing
-
     return new Response(
-      JSON.stringify({ 
-        success: true, 
+      JSON.stringify({
+        success: true,
         message: "Invitation email sent successfully",
         email,
         invitationLink,
-        businessName,
-        // In development, include the HTML for testing
-        emailPreview: emailHtml
+        resendId: data?.id,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 }
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+        status: 200,
+      },
     );
   } catch (error) {
     console.error("❌ Error sending invitation:", error);
     return new Response(
-      JSON.stringify({ error: error.message }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 500 }
+      JSON.stringify({
+        error: error.message,
+      }),
+      {
+        headers: {
+          ...corsHeaders,
+          "Content-Type": "application/json",
+        },
+        status: 500,
+      },
     );
   }
 });

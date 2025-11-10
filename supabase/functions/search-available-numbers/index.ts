@@ -48,6 +48,9 @@ Deno.serve(async (req) => {
     let type = "Local"; // could also be TollFree or Mobile
     let areaCode;
     let contains;
+    let page = 0;
+    let pageSize = 20;
+    let tollFreePrefix; // For 800, 888, 877, 866, 855, 844, 833
     try {
       const contentType = req.headers.get("content-type") || "";
       if (contentType.includes("application/json")) {
@@ -56,12 +59,18 @@ Deno.serve(async (req) => {
         type = body.type || type;
         areaCode = body.areaCode;
         contains = body.contains;
+        page = typeof body.page === "number" ? body.page : page;
+        pageSize = typeof body.pageSize === "number" ? body.pageSize : pageSize;
+        tollFreePrefix = body.tollFreePrefix;
       } else {
         const url = new URL(req.url);
         country = url.searchParams.get("country") || country;
         type = url.searchParams.get("type") || type;
         areaCode = url.searchParams.get("areaCode") || undefined;
         contains = url.searchParams.get("contains") || undefined;
+        page = parseInt(url.searchParams.get("page") || "0", 10) || 0;
+        pageSize = parseInt(url.searchParams.get("pageSize") || "20", 10) || 20;
+        tollFreePrefix = url.searchParams.get("tollFreePrefix") || undefined;
       }
     } catch (_) {}
     const accountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
@@ -82,9 +91,19 @@ Deno.serve(async (req) => {
     }
     // Build URL for AvailablePhoneNumbers subresource
     const params = new URLSearchParams({
-      Limit: "20",
+      PageSize: String(pageSize),
     });
-    if (areaCode) params.set("AreaCode", areaCode);
+    if (page > 0) params.set("Page", String(page));
+    
+    // For toll-free numbers, use TollFree type and optionally filter by prefix
+    if (type === "TollFree") {
+      if (tollFreePrefix) {
+        params.set("AreaCode", tollFreePrefix);
+      }
+    } else if (areaCode) {
+      params.set("AreaCode", areaCode);
+    }
+    
     if (contains) params.set("Contains", contains);
     const url = `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/AvailablePhoneNumbers/${country}/${type}.json?${params.toString()}`;
     const resp = await fetch(url, {

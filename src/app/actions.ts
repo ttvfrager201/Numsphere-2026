@@ -241,7 +241,7 @@ export const signUpWithPasswordAction = async (formData: FormData) => {
     email,
     password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"}/auth/callback`,
+      emailRedirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || "https://a3e7eede-1fb4-49e2-a6c1-0471dd7dfb92.canvases.tempo.build"}/auth/callback`,
     },
   });
 
