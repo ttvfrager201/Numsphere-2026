@@ -998,7 +998,7 @@ export default function Dashboard() {
         );
 
       case "purchase":
-        const tollFreePrefixes = ["800", "888", "877", "866", "855", "844", "833"];
+        const tollFreePrefixes = ["888", "877", "866", "855", "844", "833"];
 
         return (
           <div className="space-y-6 animate-in fade-in duration-700">
@@ -1019,7 +1019,7 @@ export default function Dashboard() {
                   Search Available Numbers
                 </CardTitle>
                 <CardDescription className="text-gray-500">
-                  Find local numbers or toll-free (800, 888, 877, etc.)
+                  Find local numbers or toll-free (888, 877, etc.)
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -1028,13 +1028,20 @@ export default function Dashboard() {
                     <Label className="text-gray-700 font-semibold">
                       Number Type
                     </Label>
-                    <Select value={searchType} onValueChange={(value: "Local" | "TollFree") => setSearchType(value)}>
+                    <Select
+                      value={searchType}
+                      onValueChange={(value: "Local" | "TollFree") =>
+                        setSearchType(value)
+                      }
+                    >
                       <SelectTrigger className="border-2 border-gray-200 focus:border-indigo-500 mt-1">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Local">Local Numbers</SelectItem>
-                        <SelectItem value="TollFree">Toll-Free Numbers</SelectItem>
+                        <SelectItem value="TollFree">
+                          Toll-Free Numbers
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
@@ -1048,7 +1055,10 @@ export default function Dashboard() {
                         <Select
                           value={numberSearch.country}
                           onValueChange={(value) =>
-                            setNumberSearch((prev) => ({ ...prev, country: value }))
+                            setNumberSearch((prev) => ({
+                              ...prev,
+                              country: value,
+                            }))
                           }
                         >
                           <SelectTrigger className="border-2 border-gray-200 focus:border-indigo-500 mt-1">
@@ -1083,7 +1093,10 @@ export default function Dashboard() {
                       <Label className="text-gray-700 font-semibold">
                         Toll-Free Prefix
                       </Label>
-                      <Select value={tollFreePrefix} onValueChange={setTollFreePrefix}>
+                      <Select
+                        value={tollFreePrefix}
+                        onValueChange={setTollFreePrefix}
+                      >
                         <SelectTrigger className="border-2 border-gray-200 focus:border-indigo-500 mt-1">
                           <SelectValue />
                         </SelectTrigger>
@@ -1344,7 +1357,7 @@ export default function Dashboard() {
                   <Phone className="w-5 h-5" />
                   <span>Phone Numbers</span>
                 </button>
-                
+
                 <button
                   onClick={() => setCurrentView("purchase")}
                   className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
@@ -1356,7 +1369,7 @@ export default function Dashboard() {
                   <ShoppingCart className="w-5 h-5" />
                   <span>Buy Numbers</span>
                 </button>
-                
+
                 <a
                   href="/dashboard/call-flows"
                   className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
@@ -1364,7 +1377,7 @@ export default function Dashboard() {
                   <Zap className="w-5 h-5" />
                   <span>Call Flows (Builder)</span>
                 </a>
-                
+
                 <a
                   href="/dashboard/call-logs"
                   className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
