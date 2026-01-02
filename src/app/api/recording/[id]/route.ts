@@ -29,16 +29,20 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     return new Response(text || "Failed to fetch recording", { status: twilioRes.status });
   }
 
-  const contentType = twilioRes.headers.get("content-type") || (fmt === "mp3" ? "audio/mpeg" : "audio/wav");
-  const contentLength = twilioRes.headers.get("content-length") || undefined;
+    const contentType = twilioRes.headers.get("content-type") || (fmt === "mp3" ? "audio/mpeg" : "audio/wav");
+    const contentLength = twilioRes.headers.get("content-length") || undefined;
 
-  return new Response(twilioRes.body, {
-    status: 200,
-    headers: {
-      "Content-Type": contentType,
-      ...(contentLength ? { "Content-Length": contentLength } : {}),
-      "Cache-Control": "private, max-age=0, must-revalidate",
-      "Accept-Ranges": "bytes",
-    },
-  });
+    return new Response(twilioRes.body, {
+      status: 200,
+      headers: {
+        "Content-Type": contentType,
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
+        "Cache-Control": "private, max-age=0, must-revalidate",
+        "Accept-Ranges": "bytes",
+      },
+    });
+  } catch (err) {
+    console.error("Error fetching recording:", err);
+    return new Response("Failed to fetch recording", { status: 500 });
+  }
 }

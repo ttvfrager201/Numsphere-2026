@@ -41,6 +41,7 @@
     "react-resizable-panels": "^2.1.7",
     "reactflow": "^11.11.4",
     "stripe": "^17.6.0",
+    "supabase": "^2.70.5",
     "tempo-devtools": "^2.0.94",
     "twilio": "^5.9.0",
     "twilio-client": "^1.15.1",

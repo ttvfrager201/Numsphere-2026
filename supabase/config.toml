@@ -1,3 +1,9 @@
 [functions]
 [functions.payments-webhook]
 verify_jwt = false
+
+[functions.voice-twiml]
+verify_jwt = false
+
+[functions.twiml-webhook]
+verify_jwt = false

@@ -40,7 +40,7 @@ export async function POST(req: Request) {
     const client = twilio(accountSid, authToken);
     // Point Twilio to the Supabase Edge Function instead of Next.js route
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const voiceUrl = `${supabaseUrl}/functions/v1/supabase-functions-voice-twiml`;
+    const voiceUrl = `${supabaseUrl}/functions/v1/voice-twiml`;
 
     // Update TwiML App
     await client.applications(appSidToUse).update({

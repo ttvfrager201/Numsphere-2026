@@ -15,6 +15,7 @@ import {
 import { FlowBlock } from "@/stores/callFlowStore";
 import { Settings, Plus, X, Link } from "lucide-react";
 import { MessageCircle } from "lucide-react";
+import AudioRecorder from "@/components/AudioRecorder";
 
 interface BlockPropertiesProps {
   block: FlowBlock | null;
@@ -139,30 +140,46 @@ export default function BlockProperties({
         {/* Block-specific configuration */}
         {block.type === "say" && (
           <div className="space-y-3">
+            <AudioRecorder
+              label="Message Audio Recording"
+              currentAudioUrl={block.config.audioUrl || block.config.audio_url}
+              onRecordingComplete={(url) => updateConfig({ audioUrl: url })}
+            />
             <div className="space-y-2">
-              <Label className="text-sm">Message Text</Label>
+              <Label className="text-sm">Message Text (Fallback)</Label>
               <Textarea
                 value={block.config.text || ""}
                 onChange={(e) => updateConfig({ text: e.target.value })}
-                placeholder="Enter the message to speak..."
+                placeholder="Enter the message to speak (only used if no audio recording provided)..."
                 rows={3}
                 className="text-sm"
               />
+              <p className="text-xs text-gray-500">
+                This text will only be used if no audio recording is provided.
+              </p>
             </div>
           </div>
         )}
 
         {block.type === "gather" && (
           <div className="space-y-3">
+            <AudioRecorder
+              label="Menu Prompt Audio Recording"
+              currentAudioUrl={block.config.promptAudioUrl || block.config.prompt_audio_url}
+              onRecordingComplete={(url) => updateConfig({ promptAudioUrl: url })}
+            />
             <div className="space-y-2">
-              <Label className="text-sm">Menu Prompt</Label>
+              <Label className="text-sm">Menu Prompt Text (Fallback)</Label>
               <Textarea
                 value={block.config.prompt || ""}
                 onChange={(e) => updateConfig({ prompt: e.target.value })}
-                placeholder="Enter the menu prompt..."
+                placeholder="Enter the menu prompt (only used if no audio recording provided)..."
                 rows={3}
                 className="text-sm"
               />
+              <p className="text-xs text-gray-500">
+                This text will only be used if no audio recording is provided.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -183,7 +200,14 @@ export default function BlockProperties({
                 </div>
               </div>
               <div>
-                <Label className="text-xs text-gray-600">Retry Message</Label>
+                <AudioRecorder
+                  label="Retry Message Audio"
+                  currentAudioUrl={block.config.retryAudioUrl || block.config.retry_audio_url}
+                  onRecordingComplete={(url) => updateConfig({ retryAudioUrl: url })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600">Retry Message Text (Fallback)</Label>
                 <Textarea
                   value={block.config.retryMessage || ""}
                   onChange={(e) =>
@@ -195,7 +219,14 @@ export default function BlockProperties({
                 />
               </div>
               <div>
-                <Label className="text-xs text-gray-600">Goodbye Message</Label>
+                <AudioRecorder
+                  label="Goodbye Message Audio"
+                  currentAudioUrl={block.config.goodbyeAudioUrl || block.config.goodbye_audio_url}
+                  onRecordingComplete={(url) => updateConfig({ goodbyeAudioUrl: url })}
+                />
+              </div>
+              <div>
+                <Label className="text-xs text-gray-600">Goodbye Message Text (Fallback)</Label>
                 <Textarea
                   value={block.config.goodbyeMessage || ""}
                   onChange={(e) =>
@@ -245,6 +276,15 @@ export default function BlockProperties({
                       >
                         <X className="h-3 w-3" />
                       </Button>
+                    </div>
+                    <div className="space-y-1">
+                      <AudioRecorder
+                        label="Response Audio (Optional)"
+                        currentAudioUrl={option.audioUrl || option.audio_url}
+                        onRecordingComplete={(url) =>
+                          updateMenuOption(index, { audioUrl: url })
+                        }
+                      />
                     </div>
                     <div className="space-y-2">
                       <Label className="text-xs text-gray-600">

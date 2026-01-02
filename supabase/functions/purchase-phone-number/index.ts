@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     // Initialize Supabase client
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL") ?? "",
-      Deno.env.get("SERVICE_KEY") ?? "",
+      Deno.env.get("SUPABASE_SERVICE_KEY") ?? Deno.env.get("SERVICE_KEY") ?? "",
       {
         global: {
           headers: {
@@ -61,9 +61,8 @@ Deno.serve(async (req) => {
       );
     }
     const twilioAccountSid = Deno.env.get("TWILIO_ACCOUNT_SID");
-    const twilioApiKey = Deno.env.get("TWILIO_API_KEY");
-    const twilioApiSecret = Deno.env.get("TWILIO_API_SECRET");
-    if (!twilioAccountSid || !twilioApiKey || !twilioApiSecret) {
+    const twilioAuthToken = Deno.env.get("TWILIO_AUTH_TOKEN");
+    if (!twilioAccountSid || !twilioAuthToken) {
       return new Response(
         JSON.stringify({
           error: "Twilio credentials not configured",
@@ -77,14 +76,14 @@ Deno.serve(async (req) => {
         },
       );
     }
-    // Get the webhook URL for TwiML
-    const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/supabase-functions-twiml-webhook`;
+    // Get the webhook URL for TwiML - point to voice-twiml function for call flows
+    const webhookUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/voice-twiml`;
     // Purchase the phone number from Twilio with webhook configuration
     const twilioUrl = `https://api.twilio.com/2010-04-01/Accounts/${twilioAccountSid}/IncomingPhoneNumbers.json`;
     const response = await fetch(twilioUrl, {
       method: "POST",
       headers: {
-        Authorization: `Basic ${btoa(`${twilioApiKey}:${twilioApiSecret}`)}`,
+        Authorization: `Basic ${btoa(`${twilioAccountSid}:${twilioAuthToken}`)}`,
         "Content-Type": "application/x-www-form-urlencoded",
       },
       body: new URLSearchParams({

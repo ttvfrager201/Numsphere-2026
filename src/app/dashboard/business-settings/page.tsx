@@ -240,7 +240,7 @@ export default function BusinessSettingsPage() {
 
       // Send invitation email via Supabase function
       const { error: emailError } = await supabase.functions.invoke(
-        "supabase-functions-send-employee-invitation",
+        "send-employee-invitation",
         {
           body: {
             email: inviteEmail,

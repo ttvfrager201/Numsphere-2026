@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await supabase.functions.invoke("supabase-functions-send-employee-invitation", {
+    await supabase.functions.invoke("send-employee-invitation", {
       body: {
         email,
         businessName: business.business_name || "the business",

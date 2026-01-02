@@ -424,7 +424,7 @@ export default function Dashboard() {
     setLoadingTwilio(true);
     try {
       const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-get-twilio-numbers",
+        "get-twilio-numbers",
         {
           headers: {
             Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token}`,
@@ -466,7 +466,7 @@ export default function Dashboard() {
       }
 
       const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-search-available-numbers",
+        "search-available-numbers",
         {
           body,
           headers: {
@@ -497,7 +497,7 @@ export default function Dashboard() {
     setPurchasingNumber(phoneNumber);
     try {
       const { data, error } = await supabase.functions.invoke(
-        "supabase-functions-purchase-phone-number",
+        "purchase-phone-number",
         {
           body: { phoneNumber },
           headers: {

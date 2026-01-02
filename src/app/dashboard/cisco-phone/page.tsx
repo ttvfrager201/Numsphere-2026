@@ -119,7 +119,7 @@ export default function CiscoPhoneIntegrationPage() {
       // Step 4: Test voice connection - Call the actual backend
       setConnectionStep(3);
       const response = await supabase.functions.invoke(
-        "supabase-functions-test-sip-connection",
+        "test-sip-connection",
         {
           body: { phoneNumber: selectedNumber.phone_number },
           headers: {
