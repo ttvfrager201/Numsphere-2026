@@ -112,19 +112,6 @@ interface CallLog {
   ended_at: string;
 }
 
-interface BusinessAccount {
-  id: string;
-  business_name: string;
-  logo_url: string | null;
-  primary_color: string;
-  secondary_color: string;
-}
-
-interface UserRole {
-  account_type: "individual" | "business";
-  is_owner: boolean;
-  business_id: string | null;
-}
 
 const formatPhoneNumber = (number?: string) => {
   if (!number) return "Unknown";
@@ -159,20 +146,6 @@ export default function Dashboard() {
   const [searchingNumbers, setSearchingNumbers] = useState(false);
   const [purchasingNumber, setPurchasingNumber] = useState<string | null>(null);
 
-  // Dashboard selection dialog
-  const [showDashboardDialog, setShowDashboardDialog] = useState(false);
-  const [hasEmployeeAccount, setHasEmployeeAccount] = useState(false);
-  const [hasPersonalAccount, setHasPersonalAccount] = useState(false);
-  const [rememberPreference, setRememberPreference] = useState(false);
-  const [selectedDashboard, setSelectedDashboard] = useState<
-    "employee" | "personal" | null
-  >(null);
-
-  // Business account state
-  const [userRole, setUserRole] = useState<UserRole | null>(null);
-  const [businessAccount, setBusinessAccount] =
-    useState<BusinessAccount | null>(null);
-  const [allowedWidgets, setAllowedWidgets] = useState<string[]>([]);
 
   // Search states
   const [numberSearch, setNumberSearch] = useState({
@@ -602,208 +575,128 @@ export default function Dashboard() {
     );
   }
 
-  const isWidgetAllowed = (widgetKey: string) => {
-    return allowedWidgets.includes(widgetKey);
-  };
 
   const renderContent = () => {
     switch (currentView) {
       case "overview":
         return (
-          <div className="space-y-6 animate-in fade-in duration-700">
-            {/* Business Branding Header */}
-            {businessAccount && (
-              <Card className="bg-gradient-to-r from-indigo-50 to-purple-50 border-2 border-indigo-200 shadow-lg">
-                <CardContent className="p-6">
-                  <div className="flex items-center gap-4">
-                    {businessAccount.logo_url ? (
-                      <img
-                        src={businessAccount.logo_url}
-                        alt="Business Logo"
-                        className="w-16 h-16 object-contain rounded-lg"
-                      />
-                    ) : (
-                      <div
-                        className="w-16 h-16 rounded-lg flex items-center justify-center"
-                        style={{
-                          background: `linear-gradient(135deg, ${businessAccount.primary_color}, ${businessAccount.secondary_color})`,
-                        }}
-                      >
-                        <Building className="w-8 h-8 text-white" />
-                      </div>
-                    )}
-                    <div>
-                      <h2 className="text-2xl font-bold text-gray-900">
-                        {businessAccount.business_name}
-                      </h2>
-                      <p className="text-gray-600">
-                        {userRole?.is_owner
-                          ? "Owner Dashboard"
-                          : "Employee Dashboard"}
-                      </p>
+          <div className="space-y-6">
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="group relative overflow-hidden bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-slate-200/50 hover:border-indigo-300">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-blue-500/10 to-transparent rounded-full -mr-16 -mt-16"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-3 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl shadow-lg shadow-blue-500/30">
+                      <Phone className="h-6 w-6 text-white" />
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Stats Cards - Only show if allowed */}
-            {isWidgetAllowed("overview_stats") && (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <div
-                  className="animate-in fade-in slide-in-from-left-4 duration-500"
-                  style={{ animationDelay: "0ms" }}
-                >
-                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">
-                        Total Numbers
-                      </CardTitle>
-                      <div className="p-2 bg-gradient-to-br from-blue-600 to-blue-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                        <Phone className="h-4 w-4 text-white" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-blue-700 bg-clip-text text-transparent">
-                        {twilioNumbers.filter((n) => n.owned).length}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Active phone numbers
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div
-                  className="animate-in fade-in slide-in-from-left-4 duration-500"
-                  style={{ animationDelay: "50ms" }}
-                >
-                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">
-                        Call Flows
-                      </CardTitle>
-                      <div className="p-2 bg-gradient-to-br from-green-600 to-green-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                        <Zap className="h-4 w-4 text-white" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold bg-gradient-to-r from-green-600 to-green-700 bg-clip-text text-transparent">
-                        {callFlows.length}
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Active call flows
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div
-                  className="animate-in fade-in slide-in-from-left-4 duration-500"
-                  style={{ animationDelay: "100ms" }}
-                >
-                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">
-                        Calls Today
-                      </CardTitle>
-                      <div className="p-2 bg-gradient-to-br from-purple-600 to-purple-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                        <PhoneCall className="h-4 w-4 text-white" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-purple-700 bg-clip-text text-transparent">
-                        {
-                          callLogs.filter(
-                            (log) =>
-                              new Date(log.started_at).toDateString() ===
-                              new Date().toDateString(),
-                          ).length
-                        }
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Calls processed today
-                      </p>
-                    </CardContent>
-                  </Card>
-                </div>
-
-                <div
-                  className="animate-in fade-in slide-in-from-left-4 duration-500"
-                  style={{ animationDelay: "150ms" }}
-                >
-                  <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                      <CardTitle className="text-sm font-medium text-gray-600">
-                        Success Rate
-                      </CardTitle>
-                      <div className="p-2 bg-gradient-to-br from-orange-600 to-orange-700 rounded-xl group-hover:scale-110 transition-transform duration-300">
-                        <TrendingUp className="h-4 w-4 text-white" />
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="text-3xl font-bold bg-gradient-to-r from-orange-600 to-orange-700 bg-clip-text text-transparent">
-                        98.5%
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">
-                        Call completion rate
-                      </p>
-                    </CardContent>
-                  </Card>
+                  <p className="text-sm font-medium text-slate-600 mb-1">
+                    Phone Numbers
+                  </p>
+                  <p className="text-4xl font-bold text-slate-900">
+                    {twilioNumbers.filter((n) => n.owned).length}
+                  </p>
                 </div>
               </div>
-            )}
 
-            {/* Quick Actions - Only show if allowed */}
-            {isWidgetAllowed("quick_actions") && (
-              <Card
-                className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500"
-                style={{ animationDelay: "200ms" }}
-              >
-                <CardHeader>
-                  <CardTitle className="text-gray-900 flex items-center gap-2">
-                    <Zap className="h-5 w-5 text-indigo-600" />
-                    Quick Actions
-                  </CardTitle>
-                  <CardDescription className="text-gray-500">
-                    Get started with common tasks
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <Button
-                      className="bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 h-24 flex-col space-y-2 shadow-lg shadow-blue-600/30 transition-all duration-300 hover:scale-105"
-                      onClick={() =>
-                        window.open("/dashboard/calling", "_blank")
-                      }
-                    >
-                      <PhoneCall className="w-6 h-6" />
-                      <span className="font-semibold">Make a Call</span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-24 flex-col space-y-2 border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300 hover:scale-105 group"
-                      onClick={() => setCurrentView("purchase")}
-                    >
-                      <ShoppingCart className="w-6 h-6 text-gray-700 group-hover:text-indigo-600" />
-                      <span className="font-semibold text-gray-700 group-hover:text-indigo-600">
-                        Buy Numbers
-                      </span>
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="h-24 flex-col space-y-2 border-2 border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-all duration-300 hover:scale-105 group"
-                      onClick={() => setCurrentView("flows")}
-                    >
-                      <Zap className="w-6 h-6 text-gray-700 group-hover:text-purple-600" />
-                      <span className="font-semibold text-gray-700 group-hover:text-purple-600">
-                        Create Flow
-                      </span>
-                    </Button>
+              <div className="group relative overflow-hidden bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-slate-200/50 hover:border-green-300">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-green-500/10 to-transparent rounded-full -mr-16 -mt-16"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-3 bg-gradient-to-br from-green-500 to-green-600 rounded-xl shadow-lg shadow-green-500/30">
+                      <Zap className="h-6 w-6 text-white" />
+                    </div>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                  <p className="text-sm font-medium text-slate-600 mb-1">
+                    Call Flows
+                  </p>
+                  <p className="text-4xl font-bold text-slate-900">
+                    {callFlows.length}
+                  </p>
+                </div>
+              </div>
+
+              <div className="group relative overflow-hidden bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-slate-200/50 hover:border-purple-300">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-purple-500/10 to-transparent rounded-full -mr-16 -mt-16"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-3 bg-gradient-to-br from-purple-500 to-purple-600 rounded-xl shadow-lg shadow-purple-500/30">
+                      <PhoneCall className="h-6 w-6 text-white" />
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-slate-600 mb-1">
+                    Calls Today
+                  </p>
+                  <p className="text-4xl font-bold text-slate-900">
+                    {
+                      callLogs.filter(
+                        (log) =>
+                          new Date(log.started_at).toDateString() ===
+                          new Date().toDateString(),
+                      ).length
+                    }
+                  </p>
+                </div>
+              </div>
+
+              <div className="group relative overflow-hidden bg-white rounded-2xl p-6 shadow-lg hover:shadow-2xl transition-all duration-300 border border-slate-200/50 hover:border-orange-300">
+                <div className="absolute top-0 right-0 w-32 h-32 bg-gradient-to-br from-orange-500/10 to-transparent rounded-full -mr-16 -mt-16"></div>
+                <div className="relative">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="p-3 bg-gradient-to-br from-orange-500 to-orange-600 rounded-xl shadow-lg shadow-orange-500/30">
+                      <TrendingUp className="h-6 w-6 text-white" />
+                    </div>
+                  </div>
+                  <p className="text-sm font-medium text-slate-600 mb-1">
+                    Success Rate
+                  </p>
+                  <p className="text-4xl font-bold text-slate-900">
+                    98.5%
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Quick Actions */}
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200/50">
+              <h3 className="text-lg font-semibold text-slate-900 mb-4">Quick Actions</h3>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <button
+                  onClick={() => window.open("/dashboard/calling", "_blank")}
+                  className="group relative overflow-hidden bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 rounded-xl p-6 text-white transition-all duration-300 hover:shadow-xl hover:shadow-indigo-500/30 hover:scale-105"
+                >
+                  <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -mr-12 -mt-12"></div>
+                  <div className="relative flex flex-col items-center space-y-3">
+                    <PhoneCall className="w-8 h-8" />
+                    <span className="font-semibold">Make a Call</span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => setCurrentView("purchase")}
+                  className="group relative overflow-hidden bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-indigo-300 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:scale-105"
+                >
+                  <div className="flex flex-col items-center space-y-3">
+                    <ShoppingCart className="w-8 h-8 text-slate-700 group-hover:text-indigo-600 transition-colors" />
+                    <span className="font-semibold text-slate-700 group-hover:text-indigo-600 transition-colors">
+                      Buy Numbers
+                    </span>
+                  </div>
+                </button>
+                <button
+                  onClick={() => router.push("/dashboard/call-flows")}
+                  className="group relative overflow-hidden bg-white hover:bg-slate-50 border-2 border-slate-200 hover:border-purple-300 rounded-xl p-6 transition-all duration-300 hover:shadow-lg hover:scale-105"
+                >
+                  <div className="flex flex-col items-center space-y-3">
+                    <Zap className="w-8 h-8 text-slate-700 group-hover:text-purple-600 transition-colors" />
+                    <span className="font-semibold text-slate-700 group-hover:text-purple-600 transition-colors">
+                      Create Flow
+                    </span>
+                  </div>
+                </button>
+              </div>
+            </div>
 
             {/* Recent Activity - Only show if allowed */}
             {isWidgetAllowed("recent_calls") && (
@@ -886,77 +779,65 @@ export default function Dashboard() {
 
       case "numbers":
         return (
-          <div className="space-y-6 animate-in fade-in duration-700">
-            <div className="flex justify-between items-center">
-              <div>
-                <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                  <Phone className="h-6 w-6 text-indigo-600" />
-                  My Phone Numbers
-                </h2>
-                <p className="text-gray-600 mt-1">
-                  Manage your purchased phone numbers
-                </p>
-              </div>
-              <Button
-                variant="outline"
+          <div className="space-y-6">
+            <div className="flex justify-end">
+              <button
                 onClick={fetchTwilioNumbers}
                 disabled={loadingTwilio}
-                className="border-2 border-gray-200 hover:border-indigo-300 hover:bg-indigo-50 transition-all duration-300"
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-slate-300 hover:border-indigo-400 rounded-lg text-sm font-medium text-slate-700 hover:text-indigo-600 transition-all duration-200 shadow-sm hover:shadow"
               >
                 {loadingTwilio ? (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-indigo-600"></div>
                 ) : (
-                  <RefreshCw className="w-4 h-4" />
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Refresh
+                  </>
                 )}
-              </Button>
+              </button>
             </div>
 
             <div className="grid gap-4">
               {twilioNumbers
                 .filter((n) => n.owned)
                 .map((number, index) => (
-                  <div
-                    key={number.sid}
-                    style={{ animationDelay: `${index * 50}ms` }}
-                    className="animate-in fade-in slide-in-from-left-4 duration-500"
-                  >
-                    <Card className="bg-white border-0 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 group">
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            <div className="w-14 h-14 bg-gradient-to-br from-blue-600 to-indigo-600 rounded-2xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 shadow-lg">
-                              <Phone className="w-7 h-7 text-white" />
-                            </div>
-                            <div>
-                              <h3 className="font-bold text-lg text-gray-900">
-                                {formatPhoneNumber(number.phoneNumber)}
-                              </h3>
-                              <p className="text-sm text-gray-600">
-                                {number.friendlyName}
-                              </p>
-                              <div className="flex items-center space-x-2 mt-2">
-                                {number.capabilities.voice && (
-                                  <Badge className="bg-blue-100 text-blue-700 border border-blue-200">
-                                    Voice
-                                  </Badge>
-                                )}
-                                {number.capabilities.sms && (
-                                  <Badge className="bg-green-100 text-green-700 border border-green-200">
-                                    SMS
-                                  </Badge>
-                                )}
-                                {number.capabilities.mms && (
-                                  <Badge className="bg-purple-100 text-purple-700 border border-purple-200">
-                                    MMS
-                                  </Badge>
-                                )}
-                              </div>
+                  <div key={number.sid}>
+                    <div className="bg-white rounded-xl p-5 shadow-lg border border-slate-200/50 hover:border-indigo-300 hover:shadow-xl transition-all duration-300">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                          <div className="w-14 h-14 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+                            <Phone className="w-7 h-7 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="text-lg font-bold text-slate-900">
+                              {formatPhoneNumber(number.phoneNumber)}
+                            </h3>
+                            <p className="text-sm text-slate-600">
+                              {number.friendlyName}
+                            </p>
+                            <div className="flex items-center gap-2 mt-2">
+                              {number.capabilities.voice && (
+                                <span className="px-2 py-1 bg-blue-50 text-blue-700 text-xs font-medium rounded-md">
+                                  Voice
+                                </span>
+                              )}
+                              {number.capabilities.sms && (
+                                <span className="px-2 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-md">
+                                  SMS
+                                </span>
+                              )}
+                              {number.capabilities.mms && (
+                                <span className="px-2 py-1 bg-purple-50 text-purple-700 text-xs font-medium rounded-md">
+                                  MMS
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <div className="flex items-center space-x-2">
-                            <Badge className="bg-green-100 text-green-700 border-2 border-green-200 px-3 py-1">
-                              ✓ Active
-                            </Badge>
+                        </div>
+                        <div className="flex items-center space-x-3">
+                          <span className="px-3 py-1.5 bg-green-50 text-green-700 text-sm font-semibold rounded-lg border border-green-200">
+                            Active
+                          </span>
                             <Button
                               variant="outline"
                               size="sm"
@@ -1001,27 +882,14 @@ export default function Dashboard() {
         const tollFreePrefixes = ["888", "877", "866", "855", "844", "833"];
 
         return (
-          <div className="space-y-6 animate-in fade-in duration-700">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-                <ShoppingCart className="h-6 w-6 text-indigo-600" />
-                Buy Phone Numbers
-              </h2>
-              <p className="text-gray-600 mt-1">
-                Search and purchase local or toll-free phone numbers
+          <div className="space-y-6">
+            <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200/50">
+              <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                Search Available Numbers
+              </h3>
+              <p className="text-sm text-slate-600 mb-6">
+                Find local or toll-free phone numbers
               </p>
-            </div>
-
-            <Card className="bg-white border-0 shadow-lg">
-              <CardHeader>
-                <CardTitle className="text-gray-900 flex items-center gap-2">
-                  <Search className="h-5 w-5 text-indigo-600" />
-                  Search Available Numbers
-                </CardTitle>
-                <CardDescription className="text-gray-500">
-                  Find local numbers or toll-free (888, 877, etc.)
-                </CardDescription>
-              </CardHeader>
               <CardContent className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
@@ -1128,80 +996,72 @@ export default function Dashboard() {
                     />
                   </div>
                 </div>
-                <Button
+                <button
                   onClick={searchAvailableNumbers}
                   disabled={searchingNumbers}
-                  className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-semibold shadow-lg shadow-blue-600/30 transition-all duration-300 hover:scale-105"
+                  className="w-full bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-semibold py-3 px-6 rounded-xl shadow-lg shadow-indigo-500/30 hover:shadow-xl hover:shadow-indigo-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {searchingNumbers ? (
                     <>
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                      Searching...
+                      <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white mx-auto"></div>
                     </>
                   ) : (
-                    <>
-                      <Search className="w-4 h-4 mr-2" />
+                    <span className="flex items-center justify-center gap-2">
+                      <Search className="w-5 h-5" />
                       Search Numbers
-                    </>
+                    </span>
                   )}
-                </Button>
-              </CardContent>
-            </Card>
+                </button>
+              </div>
+            </div>
 
             {availableNumbers.length > 0 && (
-              <Card className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500">
-                <CardHeader>
-                  <CardTitle className="text-gray-900 flex items-center gap-2">
-                    <Phone className="h-5 w-5 text-indigo-600" />
-                    Available Numbers
-                  </CardTitle>
-                  <CardDescription className="text-gray-500">
-                    Click to purchase a number
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid gap-3">
-                    {availableNumbers.map((number, index) => (
-                      <div
-                        key={index}
-                        style={{ animationDelay: `${index * 50}ms` }}
-                        className="flex items-center justify-between p-4 border-2 border-gray-100 rounded-xl hover:border-indigo-200 hover:bg-indigo-50 transition-all duration-300 animate-in fade-in slide-in-from-left-4 group"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h4 className="font-bold text-gray-900 group-hover:text-indigo-600 transition-colors">
-                              {formatPhoneNumber(number.phoneNumber)}
-                            </h4>
-                            {searchType === "TollFree" && (
-                              <Badge className="bg-green-100 text-green-800 border border-green-200">
-                                Toll-Free
-                              </Badge>
-                            )}
-                          </div>
-                          <p className="text-sm text-gray-600">
-                            📍 {number.locality}, {number.region} •{" "}
-                            {number.estimatedPrice}
-                          </p>
-                        </div>
-                        <Button
-                          onClick={() => purchaseNumber(number.phoneNumber)}
-                          disabled={purchasingNumber === number.phoneNumber}
-                          className="bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold shadow-lg shadow-green-600/30 transition-all duration-300 hover:scale-105"
-                        >
-                          {purchasingNumber === number.phoneNumber ? (
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                          ) : (
-                            <>
-                              <ShoppingCart className="w-4 h-4 mr-2" />
-                              Purchase
-                            </>
+              <div className="bg-white rounded-2xl p-6 shadow-lg border border-slate-200/50">
+                <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                  Available Numbers ({availableNumbers.length})
+                </h3>
+                <p className="text-sm text-slate-600 mb-4">
+                  Click to purchase a number
+                </p>
+                <div className="space-y-3">
+                  {availableNumbers.map((number, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-4 bg-slate-50 border border-slate-200 rounded-xl hover:border-indigo-300 hover:bg-indigo-50/50 transition-all duration-200"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-slate-900">
+                            {formatPhoneNumber(number.phoneNumber)}
+                          </h4>
+                          {searchType === "TollFree" && (
+                            <span className="px-2 py-1 bg-green-50 text-green-700 text-xs font-medium rounded-md">
+                              Toll-Free
+                            </span>
                           )}
-                        </Button>
+                        </div>
+                        <p className="text-sm text-slate-600 mt-1">
+                          {number.locality}, {number.region} • {number.estimatedPrice}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
+                      <button
+                        onClick={() => purchaseNumber(number.phoneNumber)}
+                        disabled={purchasingNumber === number.phoneNumber}
+                        className="bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white font-semibold py-2 px-4 rounded-lg shadow-lg shadow-green-500/30 hover:shadow-xl hover:shadow-green-500/40 transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {purchasingNumber === number.phoneNumber ? (
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                        ) : (
+                          <>
+                            <ShoppingCart className="w-4 h-4" />
+                            Purchase
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
         );
@@ -1261,86 +1121,62 @@ export default function Dashboard() {
 
   return (
     <>
-      <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-white to-purple-50">
+      <div className="min-h-screen bg-slate-900">
         <DashboardNavbar />
 
         <div className="flex">
           {/* Sidebar */}
-          <div className="w-64 bg-white shadow-lg border-r border-gray-200 min-h-screen">
-            <div className="p-6">
-              {/* User Profile */}
-              <div className="mb-8 p-4 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border-2 border-indigo-100">
-                <div className="flex items-center space-x-3">
-                  {businessAccount?.logo_url ? (
-                    <img
-                      src={businessAccount.logo_url}
-                      alt="Business Logo"
-                      className="w-12 h-12 object-contain rounded-full"
-                    />
-                  ) : (
-                    <div className="w-12 h-12 rounded-full overflow-hidden bg-gradient-to-br from-indigo-600 to-purple-600 flex items-center justify-center shadow-lg">
-                      {user?.user_metadata?.avatar_url ? (
-                        <img
-                          src={user.user_metadata.avatar_url}
-                          alt="Profile"
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <span className="text-white font-bold text-lg">
-                          {user?.user_metadata?.full_name?.charAt(0) ||
-                            user?.email?.charAt(0) ||
-                            "U"}
-                        </span>
-                      )}
-                    </div>
-                  )}
+          <div className="w-64 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 min-h-screen shadow-2xl">
+            <div className="p-4 border-b border-slate-700/50">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2.5 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl shadow-lg">
+                  <Phone className="h-6 w-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-white">
+                    NumSphere
+                  </h2>
+                  <p className="text-xs text-slate-400">VoIP Platform</p>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl p-4 shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 bg-white/20 backdrop-blur-sm rounded-full flex items-center justify-center text-white font-bold text-lg border-2 border-white/30">
+                    {user?.email?.[0]?.toUpperCase() || "U"}
+                  </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-gray-900 truncate">
+                    <p className="text-sm font-semibold text-white truncate">
                       {user?.user_metadata?.full_name ||
                         user?.email?.split("@")[0] ||
                         "User"}
                     </p>
-                    <p className="text-xs text-gray-600 truncate">
-                      {selectedDashboard === "employee"
-                        ? "Employee"
-                        : userRole?.is_owner
-                          ? "Owner"
-                          : "Individual"}
+                    <p className="text-xs text-indigo-100 truncate">
+                      {user?.email}
                     </p>
                   </div>
                 </div>
-
-                {/* Switch Dashboard Button */}
-                {hasEmployeeAccount && hasPersonalAccount && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={switchDashboard}
-                    className="w-full mt-3 text-xs border-2 border-indigo-200 hover:bg-indigo-50"
-                  >
-                    <RefreshCw className="w-3 h-3 mr-1" />
-                    Switch Dashboard
-                  </Button>
-                )}
               </div>
+            </div>
 
-              <nav className="space-y-2">
+            <div className="p-3">
+              <nav className="space-y-1.5">
                 <button
                   onClick={() => setCurrentView("overview")}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                     currentView === "overview"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/50"
+                      : "text-slate-300 hover:bg-slate-800/50 hover:text-white"
                   }`}
                 >
                   <BarChart3 className="w-5 h-5" />
-                  <span>Overview</span>
+                  <span>Dashboard</span>
                 </button>
 
                 <a
                   href="/dashboard/calling"
                   target="_blank"
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-white transition-all duration-200"
                 >
                   <PhoneCall className="w-5 h-5" />
                   <span>Make Calls</span>
@@ -1348,10 +1184,10 @@ export default function Dashboard() {
 
                 <button
                   onClick={() => setCurrentView("numbers")}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                     currentView === "numbers"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/50"
+                      : "text-slate-300 hover:bg-slate-800/50 hover:text-white"
                   }`}
                 >
                   <Phone className="w-5 h-5" />
@@ -1360,10 +1196,10 @@ export default function Dashboard() {
 
                 <button
                   onClick={() => setCurrentView("purchase")}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
                     currentView === "purchase"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                      ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/50"
+                      : "text-slate-300 hover:bg-slate-800/50 hover:text-white"
                   }`}
                 >
                   <ShoppingCart className="w-5 h-5" />
@@ -1372,79 +1208,55 @@ export default function Dashboard() {
 
                 <a
                   href="/dashboard/call-flows"
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-white transition-all duration-200"
                 >
                   <Zap className="w-5 h-5" />
-                  <span>Call Flows (Builder)</span>
+                  <span>Call Flows</span>
                 </a>
 
                 <a
                   href="/dashboard/call-logs"
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium text-slate-300 hover:bg-slate-800/50 hover:text-white transition-all duration-200"
                 >
                   <PhoneCall className="w-5 h-5" />
                   <span>Call Logs</span>
                 </a>
 
-                <a
-                  href="/dashboard/cisco-phone"
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-                >
-                  <Phone className="w-5 h-5" />
-                  <span>Cisco Phone</span>
-                </a>
-
-                {/* Business Settings - Only for owners */}
-                {userRole?.is_owner && (
-                  <a
-                    href="/dashboard/business-settings"
-                    className="w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 text-gray-600 hover:bg-indigo-50 hover:text-indigo-600 border-t-2 border-gray-100 mt-2 pt-4"
+                <div className="pt-3 mt-3 border-t border-slate-700/50">
+                  <button
+                    onClick={() => setCurrentView("settings")}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200 ${
+                      currentView === "settings"
+                        ? "bg-gradient-to-r from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/50"
+                        : "text-slate-300 hover:bg-slate-800/50 hover:text-white"
+                    }`}
                   >
-                    <Building className="w-5 h-5" />
-                    <span>Business Settings</span>
-                  </a>
-                )}
-
-                <button
-                  onClick={() => setCurrentView("settings")}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl font-semibold transition-all duration-300 ${
-                    currentView === "settings"
-                      ? "bg-gradient-to-r from-indigo-600 to-purple-600 text-white shadow-lg shadow-indigo-600/30"
-                      : "text-gray-600 hover:bg-indigo-50 hover:text-indigo-600"
-                  }`}
-                >
-                  <Settings className="w-5 h-5" />
-                  <span>Settings</span>
-                </button>
+                    <Settings className="w-5 h-5" />
+                    <span>Settings</span>
+                  </button>
+                </div>
               </nav>
             </div>
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 p-8">
-            <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-700">
-              <div className="flex items-center gap-3 mb-2">
-                {businessAccount?.logo_url ? (
-                  <img
-                    src={businessAccount.logo_url}
-                    alt="Logo"
-                    className="w-12 h-12 object-contain"
-                  />
-                ) : (
-                  <div className="p-3 bg-gradient-to-br from-indigo-600 to-purple-600 rounded-2xl shadow-lg">
-                    <BarChart3 className="h-6 w-6 text-white" />
-                  </div>
-                )}
-                <h1 className="text-4xl font-bold text-gray-900">Dashboard</h1>
+          <div className="flex-1 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+            <div className="p-8">
+              <div className="mb-8">
+                <h1 className="text-3xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                  {currentView === "overview" && "Dashboard"}
+                  {currentView === "numbers" && "Phone Numbers"}
+                  {currentView === "purchase" && "Buy Numbers"}
+                  {currentView === "flows" && "Call Flows"}
+                  {currentView === "settings" && "Settings"}
+                </h1>
+                <p className="text-slate-600 mt-2">
+                  Manage your VoIP communications and phone numbers
+                </p>
               </div>
-              <p className="text-gray-600 text-lg">
-                {businessAccount
-                  ? `${businessAccount.business_name} - ${userRole?.is_owner ? "Owner" : "Employee"} Portal`
-                  : "Manage your VoIP communications and phone numbers."}
-              </p>
-            </div>
 
-            {renderContent()}
+              {renderContent()}
+            </div>
           </div>
         </div>
       </div>

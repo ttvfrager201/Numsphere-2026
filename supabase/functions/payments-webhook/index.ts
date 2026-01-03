@@ -138,8 +138,11 @@ async function handleSubscriptionCreated(supabaseClient: any, event: any) {
     .eq('stripe_id', subscription.id)
     .maybeSingle();
 
+  console.log('Existing subscription found:', existingSubscription);
+  console.log('Subscription data to insert:', subscriptionData);
+
   // Update subscription in database
-  const { error } = await supabaseClient
+  const { data: insertedData, error } = await supabaseClient
     .from('subscriptions')
     .upsert({
       // If we found an existing subscription, use its UUID, otherwise let Supabase generate one
@@ -148,18 +151,27 @@ async function handleSubscriptionCreated(supabaseClient: any, event: any) {
     }, {
       // Use stripe_id as the match key for upsert
       onConflict: 'stripe_id'
-    });
+    })
+    .select();
 
   if (error) {
     console.error('Error creating subscription:', error);
+    console.error('Error details:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
     return new Response(
-      JSON.stringify({ error: "Failed to create subscription" }),
+      JSON.stringify({ 
+        error: "Failed to create subscription",
+        details: error.message,
+        hint: error.hint,
+        code: error.code
+      }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     );
   }
+
+  console.log('Subscription created/updated successfully:', insertedData);
 
   return new Response(
     JSON.stringify({ message: "Subscription created successfully" }),
@@ -245,6 +257,7 @@ async function handleCheckoutSessionCompleted(supabaseClient: any, event: any) {
   const session = event.data.object;
   console.log('Handling checkout session completed:', session.id);
   console.log('Full session data:', JSON.stringify(session, null, 2));
+  console.log('Payment status:', session.payment_status);
   
   const subscriptionId = typeof session.subscription === 'string' 
     ? session.subscription 
@@ -265,16 +278,14 @@ async function handleCheckoutSessionCompleted(supabaseClient: any, event: any) {
   }
 
   try {
-    console.log('Attempting to update subscription in Stripe with ID:', subscriptionId);
-    console.log('Metadata to be added:', {
-      ...session.metadata,
-      checkoutSessionId: session.id
-    });
+    console.log('Attempting to retrieve subscription from Stripe with ID:', subscriptionId);
     
     // Fetch the current subscription from Stripe to get the latest status
     const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
     console.log('Retrieved Stripe subscription status:', stripeSubscription.status);
+    console.log('Payment status:', session.payment_status);
     
+    // Update Stripe subscription metadata
     const updatedStripeSubscription = await stripe.subscriptions.update(
       subscriptionId,
       { 
@@ -291,7 +302,14 @@ async function handleCheckoutSessionCompleted(supabaseClient: any, event: any) {
     console.log('Attempting to update subscription in Supabase with stripe_id:', subscriptionId);
     console.log('User ID being set:', session.metadata?.userId || session.metadata?.user_id);
     
-    const supabaseUpdateResult = await supabaseClient
+    // Determine the correct status - if payment is paid, set to active
+    const newStatus = session.payment_status === 'paid' && stripeSubscription.status === 'incomplete' 
+      ? 'active' 
+      : stripeSubscription.status;
+    
+    console.log('Setting subscription status to:', newStatus);
+    
+    const { data: updatedSub, error: updateError } = await supabaseClient
       .from("subscriptions")
       .update({
         metadata: {
@@ -299,19 +317,22 @@ async function handleCheckoutSessionCompleted(supabaseClient: any, event: any) {
           checkoutSessionId: session.id
         },
         user_id: session.metadata?.userId || session.metadata?.user_id,
-        status: stripeSubscription.status, // Update the status from Stripe
+        status: newStatus, // Update the status
         current_period_start: stripeSubscription.current_period_start,
         current_period_end: stripeSubscription.current_period_end,
         cancel_at_period_end: stripeSubscription.cancel_at_period_end
       })
-      .eq("stripe_id", subscriptionId);
+      .eq("stripe_id", subscriptionId)
+      .select();
     
-    console.log('Supabase update result:', JSON.stringify(supabaseUpdateResult, null, 2));
+    console.log('Supabase update result:', JSON.stringify({ data: updatedSub, error: updateError }, null, 2));
     
-    if (supabaseUpdateResult.error) {
-      console.error('Error updating Supabase subscription:', supabaseUpdateResult.error);
-      throw new Error(`Supabase update failed: ${supabaseUpdateResult.error.message}`);
+    if (updateError) {
+      console.error('Error updating Supabase subscription:', updateError);
+      throw new Error(`Supabase update failed: ${updateError.message}`);
     }
+    
+    console.log('Subscription updated successfully to status:', newStatus);
 
     return new Response(
       JSON.stringify({ 
@@ -340,12 +361,51 @@ async function handleCheckoutSessionCompleted(supabaseClient: any, event: any) {
 async function handleInvoicePaymentSucceeded(supabaseClient: any, event: any) {
   const invoice = event.data.object;
   console.log('Handling invoice payment succeeded:', invoice.id);
+  console.log('Invoice data:', JSON.stringify(invoice, null, 2));
   
   const subscriptionId = typeof invoice.subscription === 'string' 
     ? invoice.subscription 
     : invoice.subscription?.id;
 
+  if (!subscriptionId) {
+    console.log('No subscription ID in invoice');
+    return new Response(
+      JSON.stringify({ message: "No subscription in invoice" }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+
   try {
+    console.log('Retrieving subscription from Stripe:', subscriptionId);
+    
+    // Get subscription from Stripe to get latest status
+    const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+    
+    console.log('Stripe subscription status:', stripeSubscription.status);
+    console.log('Updating subscription in database...');
+    
+    // Update subscription status in database
+    const { data: updatedSub, error: updateError } = await supabaseClient
+      .from("subscriptions")
+      .update({
+        status: stripeSubscription.status,
+        current_period_start: stripeSubscription.current_period_start,
+        current_period_end: stripeSubscription.current_period_end,
+        cancel_at_period_end: stripeSubscription.cancel_at_period_end,
+      })
+      .eq("stripe_id", subscriptionId)
+      .select();
+
+    if (updateError) {
+      console.error('Error updating subscription:', updateError);
+      console.error('Error details:', JSON.stringify(updateError, Object.getOwnPropertyNames(updateError)));
+    } else {
+      console.log('Subscription updated successfully:', updatedSub);
+    }
+
     const { data: subscription } = await supabaseClient
       .from("subscriptions")
       .select("*")
@@ -371,7 +431,7 @@ async function handleInvoicePaymentSucceeded(supabaseClient: any, event: any) {
       .insert(webhookData);
 
     return new Response(
-      JSON.stringify({ message: "Invoice payment succeeded" }),
+      JSON.stringify({ message: "Invoice payment succeeded and subscription updated" }),
       { 
         status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -437,6 +497,120 @@ async function handleInvoicePaymentFailed(supabaseClient: any, event: any) {
     console.error('Error processing failed payment:', error);
     return new Response(
       JSON.stringify({ error: "Failed to process failed payment" }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+}
+
+// Handle third-party payment methods (PayPal, etc.)
+async function handlePaymentIntentSucceeded(supabaseClient: any, event: any) {
+  const paymentIntent = event.data.object;
+  console.log('Handling payment intent succeeded:', paymentIntent.id);
+  console.log('Payment method type:', paymentIntent.payment_method_types);
+
+  try {
+    // Get the subscription if this is a subscription payment
+    const invoiceId = paymentIntent.invoice;
+    if (invoiceId) {
+      const invoice = await stripe.invoices.retrieve(invoiceId);
+      const subscriptionId = typeof invoice.subscription === 'string' 
+        ? invoice.subscription 
+        : invoice.subscription?.id;
+
+      if (subscriptionId) {
+        // Get subscription from Stripe to update status
+        const stripeSubscription = await stripe.subscriptions.retrieve(subscriptionId);
+        
+        // Update subscription status in database
+        const { error: updateError } = await supabaseClient
+          .from("subscriptions")
+          .update({
+            status: stripeSubscription.status,
+            current_period_start: stripeSubscription.current_period_start,
+            current_period_end: stripeSubscription.current_period_end,
+            cancel_at_period_end: stripeSubscription.cancel_at_period_end,
+          })
+          .eq("stripe_id", subscriptionId);
+
+        if (updateError) {
+          console.error('Error updating subscription:', updateError);
+        }
+
+        console.log('Subscription updated to active via payment intent:', subscriptionId);
+      }
+    }
+
+    // Log the event
+    await supabaseClient
+      .from("webhook_events")
+      .insert({
+        event_type: event.type,
+        type: "payment_intent",
+        stripe_event_id: event.id,
+        data: {
+          paymentIntentId: paymentIntent.id,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency,
+          paymentMethod: paymentIntent.payment_method_types,
+          status: "succeeded"
+        }
+      });
+
+    return new Response(
+      JSON.stringify({ message: "Payment intent succeeded and subscription updated" }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (error) {
+    console.error('Error processing payment intent:', error);
+    return new Response(
+      JSON.stringify({ error: "Failed to process payment intent" }),
+      { 
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  }
+}
+
+async function handlePaymentIntentFailed(supabaseClient: any, event: any) {
+  const paymentIntent = event.data.object;
+  console.log('Handling payment intent failed:', paymentIntent.id);
+
+  try {
+    // Log the event
+    await supabaseClient
+      .from("webhook_events")
+      .insert({
+        event_type: event.type,
+        type: "payment_intent",
+        stripe_event_id: event.id,
+        data: {
+          paymentIntentId: paymentIntent.id,
+          amount: paymentIntent.amount / 100,
+          currency: paymentIntent.currency,
+          paymentMethod: paymentIntent.payment_method_types,
+          status: "failed",
+          lastPaymentError: paymentIntent.last_payment_error?.message
+        }
+      });
+
+    return new Response(
+      JSON.stringify({ message: "Payment intent failed recorded" }),
+      { 
+        status: 200,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    );
+  } catch (error) {
+    console.error('Error processing payment intent failure:', error);
+    return new Response(
+      JSON.stringify({ error: "Failed to process payment intent failure" }),
       { 
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -522,6 +696,10 @@ serve(async (req) => {
         return await handleInvoicePaymentSucceeded(supabaseClient, event);
       case 'invoice.payment_failed':
         return await handleInvoicePaymentFailed(supabaseClient, event);
+      case 'payment_intent.succeeded':
+        return await handlePaymentIntentSucceeded(supabaseClient, event);
+      case 'payment_intent.payment_failed':
+        return await handlePaymentIntentFailed(supabaseClient, event);
       default:
         console.log(`Unhandled event type: ${event.type}`);
         return new Response(

@@ -53,71 +53,60 @@ const useUser = () => {
 
 export default function Home() {
   const [showPricing, setShowPricing] = useState(false);
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "annually">(
-    "annually",
-  );
   const { user, loading } = useUser();
 
   const plans = [
     {
       id: 1,
-      name: "Free",
-      price: 0,
-      description: "Get started with your own personal phone system",
+      name: "Starter",
+      price: 29.99,
+      description: "Perfect for getting started",
       features: [
-        "1 Phone Number",
-        "100 minutes/month",
-        "Basic call routing",
-        "Voicemail",
-        "Mobile app",
+        "400 minutes/month",
+        "1 phone number",
+        "Coming soon: calling & flows",
       ],
       popular: false,
+      link: "/pricing",
     },
     {
       id: 2,
-      name: "Starter",
-      price: billingCycle === "monthly" ? 8 : 6,
-      description: "For creators and brands, just getting started",
+      name: "Professional",
+      price: 69.99,
+      description: "For growing businesses",
       features: [
-        "3 Phone Numbers",
-        "500 minutes/month",
-        "Advanced call flows",
-        "Call recording",
-        "Analytics",
-        "Priority support",
+        "1,500 minutes/month",
+        "3 phone numbers",
+        "Coming soon: calling & flows",
       ],
-      popular: false,
+      popular: true,
+      link: "/pricing",
     },
     {
       id: 3,
-      name: "Pro",
-      price: billingCycle === "monthly" ? 15 : 12,
-      description: "For creators and solopreneurs looking to grow and monetize",
+      name: "Business",
+      price: 149.99,
+      description: "For established businesses",
       features: [
-        "10 Phone Numbers",
-        "2000 minutes/month",
-        "AI call routing",
-        "CRM integration",
-        "Custom greetings",
-        "24/7 support",
-        "API access",
+        "3,500 minutes/month",
+        "7 phone numbers",
+        "Coming soon: calling & flows",
       ],
-      popular: true,
+      popular: false,
+      link: "/pricing",
     },
     {
       id: 4,
-      name: "Premium",
-      price: billingCycle === "monthly" ? 35 : 30,
-      description: "For businesses, brands, and teams wanting zero limits",
+      name: "Enterprise",
+      price: 349.99,
+      description: "For large organizations",
       features: [
-        "Unlimited Numbers",
-        "Unlimited minutes",
-        "White label",
-        "Dedicated account manager",
-        "Custom integrations",
-        "SLA guarantee",
+        "10,000 minutes/month",
+        "15 phone numbers",
+        "Coming soon: calling & flows",
       ],
       popular: false,
+      link: "/pricing",
     },
   ];
 
@@ -645,30 +634,6 @@ export default function Home() {
             </div>
 
             <div className="p-8 overflow-y-auto flex-1">
-              <div className="flex justify-center mb-8 sticky top-0 bg-white pb-4 z-10">
-                <div className="inline-flex rounded-full bg-gray-100 p-1 border-2 border-gray-900">
-                  <button
-                    onClick={() => setBillingCycle("monthly")}
-                    className={`px-6 py-2 rounded-full font-bold transition-all ${
-                      billingCycle === "monthly"
-                        ? "bg-gray-900 text-white"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    Monthly
-                  </button>
-                  <button
-                    onClick={() => setBillingCycle("annually")}
-                    className={`px-6 py-2 rounded-full font-bold transition-all ${
-                      billingCycle === "annually"
-                        ? "bg-gray-900 text-white"
-                        : "text-gray-600 hover:text-gray-900"
-                    }`}
-                  >
-                    Annually <span className="text-xs">(save up to 20%)</span>
-                  </button>
-                </div>
-              </div>
 
               <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 pb-8">
                 {plans.map((plan) => (
@@ -705,32 +670,24 @@ export default function Home() {
                       <div
                         className={`text-5xl font-black ${plan.popular ? "text-white" : "text-gray-900"}`}
                       >
-                        ${plan.price}
+                        ${plan.price.toFixed(2)}
                       </div>
                       <div
                         className={`text-sm font-bold ${plan.popular ? "text-indigo-100" : "text-gray-600"}`}
                       >
-                        {plan.price === 0 ? "Free, forever" : `USD/mo`}
+                        /month
                       </div>
-                      {plan.price > 0 && (
-                        <div
-                          className={`text-xs mt-1 font-semibold ${plan.popular ? "text-indigo-200" : "text-gray-500"}`}
-                        >
-                          Billed{" "}
-                          {billingCycle === "monthly" ? "monthly" : "annually"}
-                        </div>
-                      )}
                     </div>
 
                     <a
-                      href="/sign-up"
+                      href={plan.link || "/pricing"}
                       className={`block w-full py-3 rounded-full font-black text-center transition-all hover:scale-105 mb-6 ${
                         plan.popular
                           ? "bg-white text-gray-900 hover:bg-gray-100"
                           : "bg-gray-900 text-white hover:bg-gray-800"
                       }`}
                     >
-                      {plan.price === 0 ? "Sign up free" : "Start free trial"}
+                      Get Started
                     </a>
 
                     <div className="space-y-3 flex-1">

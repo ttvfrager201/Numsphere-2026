@@ -264,12 +264,20 @@ export const checkUserSubscription = async (userId: string) => {
     .from("subscriptions")
     .select("*")
     .eq("user_id", userId)
-    .eq("status", "active")
+    .in("status", ["active", "trialing"])
+    .order("created_at", { ascending: false })
+    .limit(1)
     .single();
 
-  if (error) {
+  if (error || !subscription) {
     return false;
   }
 
-  return !!subscription;
+  // Check if subscription period has ended
+  const now = Math.floor(Date.now() / 1000);
+  if (subscription.current_period_end && subscription.current_period_end < now) {
+    return false;
+  }
+
+  return true;
 };
