@@ -20,7 +20,6 @@ import {
   Pause,
   Volume2,
   MapPin,
-  Building,
   Clock,
   TrendingUp,
   Zap,
@@ -34,10 +33,8 @@ import {
   CheckCircle,
   XCircle,
   AlertCircle,
-  User as UserIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Card,
@@ -179,198 +176,18 @@ export default function Dashboard() {
         return;
       }
       setUser(user);
-
-      // Check for saved preference
-      const savedPreference = localStorage.getItem("dashboard_preference");
-
-      // Get user role and business info
-      const { data: userData } = await supabase
-        .from("users")
-        .select("account_type")
-        .eq("id", user.id)
-        .single();
-
-      // Check if employee
-      const { data: employeeData } = await supabase
-        .from("business_employees")
-        .select("business_id, business_accounts(*)")
-        .eq("user_id", user.id)
-        .eq("status", "active")
-        .maybeSingle();
-
-      // Check if owner
-      const { data: ownerData } = await supabase
-        .from("business_accounts")
-        .select("*")
-        .eq("owner_id", user.id)
-        .maybeSingle();
-
-      const isEmployee = !!employeeData;
-      const isOwner = !!ownerData;
-      const hasPersonal = userData?.account_type === "individual" || isOwner;
-
-      setHasEmployeeAccount(isEmployee);
-      setHasPersonalAccount(hasPersonal);
-
-      // If user has both employee and personal accounts
-      if (isEmployee && hasPersonal) {
-        // Check if they have a saved preference
-        if (savedPreference === "employee" || savedPreference === "personal") {
-          // Load their preferred dashboard
-          if (savedPreference === "employee") {
-            await loadEmployeeDashboard(employeeData);
-          } else {
-            await loadPersonalDashboard(ownerData);
-          }
-        } else {
-          // Show dialog to choose
-          setShowDashboardDialog(true);
-          setLoading(false);
-          return;
-        }
-      } else if (isEmployee) {
-        // Only employee account
-        await loadEmployeeDashboard(employeeData);
-      } else if (isOwner) {
-        // Only owner account
-        await loadPersonalDashboard(ownerData);
-      } else {
-        // Individual account
-        setUserRole({
-          account_type: "individual",
-          is_owner: false,
-          business_id: null,
-        });
-        setAllowedWidgets([
-          "overview_stats",
-          "recent_calls",
-          "call_flows",
-          "phone_numbers",
-          "quick_actions",
-        ]);
-      }
-
       setLoading(false);
     };
 
     getUser();
   }, []);
 
-  const loadEmployeeDashboard = async (employeeData: any) => {
-    if (!employeeData) return;
-
-    setBusinessAccount(employeeData.business_accounts);
-    setUserRole({
-      account_type: "business",
-      is_owner: false,
-      business_id: employeeData.business_id,
-    });
-
-    // Get allowed widgets for employee
-    const { data: widgetsData } = await supabase
-      .from("dashboard_widgets")
-      .select("widget_key")
-      .eq("business_id", employeeData.business_id)
-      .eq("enabled_for_employees", true);
-
-    setAllowedWidgets(widgetsData?.map((w) => w.widget_key) || []);
-    setSelectedDashboard("employee");
-  };
-
-  const loadPersonalDashboard = async (ownerData: any) => {
-    if (ownerData) {
-      setBusinessAccount(ownerData);
-      setUserRole({
-        account_type: "business",
-        is_owner: true,
-        business_id: ownerData.id,
-      });
-    } else {
-      setUserRole({
-        account_type: "individual",
-        is_owner: false,
-        business_id: null,
-      });
-    }
-
-    setAllowedWidgets([
-      "overview_stats",
-      "recent_calls",
-      "call_flows",
-      "phone_numbers",
-      "quick_actions",
-    ]);
-    setSelectedDashboard("personal");
-  };
-
-  const handleDashboardChoice = async (choice: "employee" | "personal") => {
-    setLoading(true);
-
-    try {
-      if (rememberPreference) {
-        localStorage.setItem("dashboard_preference", choice);
-      }
-
-      if (choice === "employee") {
-        const { data: employeeData } = await supabase
-          .from("business_employees")
-          .select("business_id, business_accounts(*)")
-          .eq("user_id", user?.id)
-          .eq("status", "active")
-          .single();
-
-        await loadEmployeeDashboard(employeeData);
-      } else {
-        const { data: ownerData } = await supabase
-          .from("business_accounts")
-          .select("*")
-          .eq("owner_id", user?.id)
-          .maybeSingle();
-
-        await loadPersonalDashboard(ownerData);
-      }
-
-      setShowDashboardDialog(false);
-      toast({
-        title: "Dashboard loaded",
-        description: `Switched to ${choice} dashboard`,
-      });
-    } catch (error) {
-      console.error("Error loading dashboard:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load dashboard",
-        variant: "destructive",
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const switchDashboard = () => {
-    localStorage.removeItem("dashboard_preference");
-    setShowDashboardDialog(true);
-  };
 
   useEffect(() => {
     const checkOnboardingStatus = async () => {
       if (!user) return;
 
       try {
-        // First check if user is an employee
-        const { data: employeeData } = await supabase
-          .from("business_employees")
-          .select("id")
-          .eq("user_id", user.id)
-          .maybeSingle();
-
-        // If user is an employee, skip onboarding check
-        if (employeeData) {
-          console.log("User is an employee, skipping onboarding");
-          return;
-        }
-
-        // Only check onboarding for non-employees
         const { data: userData, error } = await supabase
           .from("users")
           .select("onboarding_complete")
@@ -382,7 +199,6 @@ export default function Dashboard() {
           return;
         }
 
-        // If onboarding is not complete and user is not an employee, redirect to onboarding
         if (!userData?.onboarding_complete) {
           router.push("/onboarding");
         }
@@ -698,12 +514,11 @@ export default function Dashboard() {
               </div>
             </div>
 
-            {/* Recent Activity - Only show if allowed */}
-            {isWidgetAllowed("recent_calls") && (
-              <Card
-                className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500"
-                style={{ animationDelay: "250ms" }}
-              >
+            {/* Recent Activity */}
+            <Card
+              className="bg-white border-0 shadow-lg animate-in fade-in slide-in-from-bottom-4 duration-500"
+              style={{ animationDelay: "250ms" }}
+            >
                 <CardHeader>
                   <CardTitle className="text-gray-900 flex items-center gap-2">
                     <Clock className="h-5 w-5 text-indigo-600" />
@@ -773,7 +588,6 @@ export default function Dashboard() {
                   </div>
                 </CardContent>
               </Card>
-            )}
           </div>
         );
 
@@ -847,9 +661,8 @@ export default function Dashboard() {
                             </Button>
                           </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                      </div>
+                    </div>
                 ))}
 
               {twilioNumbers.filter((n) => n.owned).length === 0 && (
@@ -890,7 +703,7 @@ export default function Dashboard() {
               <p className="text-sm text-slate-600 mb-6">
                 Find local or toll-free phone numbers
               </p>
-              <CardContent className="space-y-4">
+              <div className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div>
                     <Label className="text-gray-700 font-semibold">
@@ -1261,71 +1074,6 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Dashboard Selection Dialog */}
-      <Dialog open={showDashboardDialog} onOpenChange={setShowDashboardDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="text-2xl font-bold text-center">
-              Choose Your Dashboard
-            </DialogTitle>
-            <DialogDescription className="text-center pt-4">
-              <div className="space-y-4">
-                <p className="text-lg font-semibold text-gray-900">
-                  You have access to multiple dashboards
-                </p>
-                <p className="text-sm text-gray-600">
-                  Which dashboard would you like to use?
-                </p>
-              </div>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid grid-cols-2 gap-3 mt-4">
-            {hasEmployeeAccount && (
-              <Button
-                onClick={() => handleDashboardChoice("employee")}
-                className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white font-bold py-6 flex-col h-auto"
-              >
-                <Building className="w-8 h-8 mb-2" />
-                <span>Employee</span>
-                <span className="text-xs font-normal opacity-90">
-                  Business Account
-                </span>
-              </Button>
-            )}
-
-            {hasPersonalAccount && (
-              <Button
-                onClick={() => handleDashboardChoice("personal")}
-                variant="outline"
-                className="border-2 border-gray-300 font-bold py-6 flex-col h-auto hover:bg-gray-50"
-              >
-                <UserIcon className="w-8 h-8 mb-2" />
-                <span>Personal</span>
-                <span className="text-xs font-normal opacity-70">
-                  {userRole?.is_owner ? "Owner Account" : "Individual Account"}
-                </span>
-              </Button>
-            )}
-          </div>
-
-          <div className="flex items-center space-x-2 mt-4 p-3 bg-gray-50 rounded-lg">
-            <Checkbox
-              id="remember"
-              checked={rememberPreference}
-              onCheckedChange={(checked) =>
-                setRememberPreference(checked as boolean)
-              }
-            />
-            <label
-              htmlFor="remember"
-              className="text-sm font-medium text-gray-700 cursor-pointer"
-            >
-              Remember my choice and always open this dashboard
-            </label>
-          </div>
-        </DialogContent>
-      </Dialog>
     </>
   );
 }

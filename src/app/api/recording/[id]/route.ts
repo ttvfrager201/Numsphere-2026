@@ -18,16 +18,17 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
 
   const basic = Buffer.from(`${accountSid}:${authToken}`).toString("base64");
 
-  const twilioRes = await fetch(twilioUrl, {
-    headers: {
-      Authorization: `Basic ${basic}`,
-    },
-  });
+  try {
+    const twilioRes = await fetch(twilioUrl, {
+      headers: {
+        Authorization: `Basic ${basic}`,
+      },
+    });
 
-  if (!twilioRes.ok) {
-    const text = await twilioRes.text().catch(() => "");
-    return new Response(text || "Failed to fetch recording", { status: twilioRes.status });
-  }
+    if (!twilioRes.ok) {
+      const text = await twilioRes.text().catch(() => "");
+      return new Response(text || "Failed to fetch recording", { status: twilioRes.status });
+    }
 
     const contentType = twilioRes.headers.get("content-type") || (fmt === "mp3" ? "audio/mpeg" : "audio/wav");
     const contentLength = twilioRes.headers.get("content-length") || undefined;

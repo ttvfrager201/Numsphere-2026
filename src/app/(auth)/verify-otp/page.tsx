@@ -1,3 +1,5 @@
+"use client";
+
 import Link from "next/link";
 import { SubmitButton } from "@/components/submit-button";
 import { Input } from "@/components/ui/input";
